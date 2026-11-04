@@ -94,6 +94,10 @@ flowchart TD
 * A model asked to evaluate its own output almost always rates itself favorably due to shared contextual bias.
 * Verification must be performed by independent **Evaluator Sub-Agents** running isolated sensor suites on fresh context.
 
+### Principle 6: Self-Contained "Workflow Packs" (Domain Isolation)
+* Adding new use cases must never pollute core engine code.
+* Every use case is packaged into an isolated, self-contained **Workflow Pack** under `workflows/<use-case>/` containing its own manifests, blueprints, guides, contracts, sensors, and regression testbeds.
+
 ---
 
 ## 3. Functional Requirements (FR)
@@ -232,6 +236,28 @@ flowchart TD
 
 ---
 
+### Phase 3: Workflow Packaging & Developer Experience
+
+#### FR-15: Self-Contained Workflow Packs (Domain Colocation)
+- [ ] Standardized directory structure for new use-case workflows under `workflows/<use-case-name>/`:
+  ```
+  workflows/<use-case-name>/
+  ├── workflow.yaml                # Master topology, agents, and governance config
+  ├── blueprints/                  # Agent blueprints bound to specific roles/engines
+  ├── guides/                      # Task specs, instructions, and prompt templates
+  ├── guards/                      # Pydantic v2 output schemas and byte boundaries
+  ├── sensors/                     # Tier 1, 2, and 3 verification checks
+  ├── tools/                       # Scoped tool definitions and MCP adapters
+  └── testbed/                     # Smoke tests and golden regression datasets
+  ```
+- [ ] **CLI Workflow Commands**:
+  - `airframe run workflows/<name> [--input key=val] [--engine <model>]`: Execute a workflow.
+  - `airframe test workflows/<name>`: Run the workflow against its local testbed.
+  - `airframe compare workflows/<name> --baseline <modelA> --candidate <modelB>`: Run differential regression test suite across engines.
+  - `airframe init workflow <name>`: Scaffold a new boilerplate workflow pack.
+
+---
+
 ## 4. Non-Functional Requirements (NFR)
 
 * **NFR-1 (Determinism & Zero Flakes):** Sensor checks must be 100% deterministic. LLM-based evaluators must enforce fixed seeds and zero temperature.
@@ -242,32 +268,47 @@ flowchart TD
 
 ---
 
-## 5. Directory Structure & Layout
+## 5. Complete Directory Structure
 
 ```
 airframe/
 ├── README.md
 ├── REQUIREMENTS.md
 ├── pyproject.toml
+│
+├── workflows/                        # Self-contained use-case packs (FR-15)
+│   ├── pr-reviewer/                  # Example: Pull Request Code Reviewer
+│   │   ├── workflow.yaml             # Manifest & orchestration config
+│   │   ├── blueprints/               # Agent specifications (supervisor, reviewer, critic)
+│   │   ├── guides/                   # Task instructions & prompt templates
+│   │   ├── guards/                   # Pydantic output schemas (CodeReviewReport)
+│   │   ├── sensors/                  # Deterministic checks & rubric judges
+│   │   ├── tools/                    # Workflow-specific tools & linters
+│   │   └── testbed/                  # Smoke tests and golden regression cases
+│   └── feature-builder/              # Example: Long-running feature implementation
+│       ├── workflow.yaml
+│       └── ...
+│
 ├── src/
 │   └── airframe/
-│       ├── adapters/         # Swappable model engines (Gemini, Claude, OpenAI, Ollama)
-│       ├── blueprints/       # Agent manifests, schemas, and dynamic definitions
-│       ├── orchestration/    # Supervisor, worker pool, topologies, and shift turnover
-│       ├── isolation/        # Git worktree managers, context partitioners, sandboxes
-│       ├── ipc/              # Asynchronous event bus, mailbox, reactive wakeups
-│       ├── guards/           # Executable guards, Pydantic schemas, repair loops
-│       ├── sensors/          # Tier 1 deterministic, Tier 2 semantic, Tier 3 judges
-│       ├── tools/            # Scoped tool registries and dynamic injectors
-│       ├── governance/       # Budget trackers, loop detectors, HITL approval gates
-│       ├── state/            # Checkpoints, disk state (plan.md, task_queue.json)
-│       ├── telemetry/        # Distributed tracing, transcript loggers, replay
-│       ├── runner/           # Async execution engine, concurrency
-│       └── cli.py            # Command-line interface (`airframe run`, `airframe compare`)
+│       ├── adapters/                 # Swappable model engines (Gemini, Claude, OpenAI, Ollama)
+│       ├── blueprints/               # Blueprint loader & schema validation (FR-8)
+│       ├── orchestration/            # Supervisor, topologies, shift turnover (FR-10, FR-11)
+│       ├── isolation/                # Git worktrees, transcript partitioners (FR-9)
+│       ├── ipc/                      # Async mailbox, event bus, reactive wakeups (FR-12)
+│       ├── guards/                   # Executable guard runner, auto-repair loops (FR-2)
+│       ├── sensors/                  # Tier 1, 2, and 3 evaluators (FR-3)
+│       ├── tools/                    # Tool registry, dynamic injector (FR-4)
+│       ├── governance/               # Budget tracker, loop detector, HITL gates (FR-13)
+│       ├── state/                    # State externalization (plan.md, task_queue.json) (FR-11)
+│       ├── telemetry/                # OpenTelemetry traces, session replay (FR-14)
+│       ├── runner/                   # Core async execution engine
+│       └── cli.py                    # CLI (`airframe run`, `airframe compare`, `airframe init`)
+│
 ├── tests/
-│   ├── unit/                 # Unit tests for airframe modules
-│   └── integration/          # Multi-agent isolation & worktree tests
+│   ├── unit/                         # Unit tests for core airframe modules
+│   └── integration/                  # End-to-end multi-agent & worktree tests
 └── datasets/
-    ├── smoke.yaml            # Sanity check suite
-    └── benchmark_core.yaml   # Comprehensive evaluation benchmark
+    ├── smoke.yaml                    # Global engine sanity checks
+    └── benchmark_core.yaml           # Global provider benchmark suite
 ```

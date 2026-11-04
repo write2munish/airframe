@@ -1,79 +1,126 @@
 # Requirements Specification: Model Harness Engineering (`model-harness`)
 
-## 1. Executive Summary & Vision
-The **Model Harness** (`model-harness`) is an evaluation, execution, and verification chassis designed to decouple large language models (LLMs) and agentic workflows from application logic. It allows engineering teams to benchmark, validate, and hot-swap underlying models (e.g., Gemini, Claude, GPT, Ollama/local models) with zero downstream regression or contract violations.
+## 1. Executive Summary & Core Formula
+
+The **Model Harness** (`model-harness`) is an evaluation, execution, and verification chassis designed to decouple large language models (LLMs) and agentic workflows from application logic. It allows engineering teams to benchmark, validate, and hot-swap underlying models (e.g., Gemini, Claude, GPT, Ollama/local models) with zero downstream regressions.
+
+### The Foundational Law
+$$\text{Agent} = \text{Model} + \text{Harness}$$
+
+* **The Model is the Engine:** Provides raw token generation, semantic reasoning, and probabilistic predictions.
+* **The Harness is the Chassis:** Provides steering, brakes, fuel injection, suspension, and telemetry.
+* **The Core Premise:** Most agent failures (infinite loops, parameter hallucinations, rule amnesia) are **structural harness failures**, not model intelligence deficits. Tweaking prompts or waiting for next-gen models cannot fix a leaking chassis.
 
 ---
 
 ## 2. Core Architectural Principles
-1. **Contract-First Design**: Models never emit unvalidated, freeform strings to application consumers. All outputs are bound to strict schemas (JSON Schema / Pydantic) with automated repair loops.
-2. **Provider Agnosticism**: Unified adapter interface isolates model-specific prompt formats, parameter differences, and token nuances.
-3. **Multi-Tier Evaluation**: Fast, deterministic assertions run first; semantic and model-based judges run only on schema-valid candidates.
-4. **Differential Regression Testing**: Every candidate model is benchmarked against a golden baseline suite to detect behavior shifts, cost drift, and latency degradation.
+
+```mermaid
+flowchart LR
+    subgraph Harness["The Harness Architecture"]
+        direction TB
+        G["Guides (Feedforward)\n• Task specs & prompt profiles\n• Scoped context diet\n• Phase-specific tools"]
+        --> M["Model Engine\n(Interchangeable)"]
+        --> S["Sensors (Feedback)\n• Linters & typecheckers\n• Schema validators\n• Test suites & exit codes"]
+        S -- "Sensor Failure\n(Targeted Error Feedback)" --> M
+        S -- "Sensor Pass" --> C["Durable Checkpoint & State"]
+    end
+```
+
+### Principle 1: Guides Before, Sensors After
+* **Guides (Feedforward):** Steer the model *before* it takes an action (concise task specifications, canonical prompt profiles, context pruning).
+* **Sensors (Feedback):** Detect failures *after* execution (schema validators, AST linters, unit tests, exit codes).
+* *Rule:* Never overload guides with rules that sensors should enforce. An agent without guides is aimless; an agent without sensors never learns when it failed.
+
+### Principle 2: Executable Guards Over Prose Rules
+* Prose rules (*"Please always return valid JSON"*, *"Do not exceed 30 lines"*) are soft suggestions that fail probabilistically.
+* Executable guards are deterministic programmatic boundaries (strict Pydantic schemas, file-write byte limits, sandbox permission gates, and automated self-repair loops).
+
+### Principle 3: Context Diet & Dynamic Tool Scoping
+* Monolithic prompt bloat causes "rule fatigue" and attention degradation.
+* Exposing 30+ tools causes parameter hallucinations and selection paralysis. The harness dynamically filters and exposes only the 3–5 tools relevant to the active task phase.
+
+### Principle 4: Durable State & Reversible Checkpointing
+* Models are strictly stateless; the harness is stateful.
+* Every meaningful action is checkpointed with rollback capability. If a step fails sensors or times out, the harness recovers without amnesia or rerunning previous successful steps.
 
 ---
 
 ## 3. Functional Requirements (FR)
 
-### FR-1: Unified Model Adapter Gateway
-- [ ] Provide an abstract base class (`ModelAdapter`) with a standardized `invoke()` and `invoke_contract()` interface.
-- [ ] Support initial providers:
-  - Local/OSS models (via Ollama or OpenAI-compatible endpoint like vLLM / LM Studio).
-  - Cloud API providers (Google Gemini, Anthropic Claude, OpenAI).
-- [ ] Support model-specific prompt profiling (compiling canonical task instructions into provider-preferred formatting).
+### FR-1: Unified Model Adapter Gateway (Swappable Engines)
+- [ ] Implement an abstract base class (`ModelAdapter`) defining a uniform interface:
+  ```python
+  def invoke(self, prompt: str, **kwargs) -> str: ...
+  def invoke_contract(self, prompt: str, schema: type[T], **kwargs) -> T: ...
+  ```
+- [ ] Initial provider implementations:
+  - **Local/OSS Models:** OpenAI-compatible endpoint (Ollama, vLLM, LM Studio).
+  - **Cloud Providers:** Google Gemini, Anthropic Claude, OpenAI.
+- [ ] **Prompt Profiling:** Compile canonical task intent into provider-specific formats (e.g., XML tags for Claude, system instruction blocks for Gemini, Markdown sections for GPT).
 
-### FR-2: Strict Schema Enforcement & Self-Repair
-- [ ] Define canonical output models using Pydantic / JSON Schema.
-- [ ] Include an automated validation loop with configurable retry attempts (`max_retries`).
-- [ ] On schema validation failure, automatically construct a targeted repair prompt passing the validation error back to the model.
+### FR-2: Executable Guards & Schema Self-Repair
+- [ ] Enforce output schemas via Pydantic v2 / JSON Schema.
+- [ ] Automated validation & repair loop:
+  - Parse raw model output against target schema.
+  - On failure, catch `ValidationError` and formulate a focused feedback prompt showing the exact violation.
+  - Retry up to `max_retries` (default: 2) before raising a hard failure.
+- [ ] Payload bounds: Programmatically reject or truncate responses that breach size/token ceilings.
 
-### FR-3: Multi-Tier Evaluator System
-- [ ] **Tier 1 (Deterministic)**:
-  - Schema validity & type checking.
-  - Required field presence & non-empty assertions.
-  - Regex pattern matching & exact match keywords.
-- [ ] **Tier 2 (Semantic / Functional)**:
-  - Embedding distance / cosine similarity against golden outputs.
-  - Tool call / argument accuracy (did it pick the right tool with the right params?).
-- [ ] **Tier 3 (Model-as-a-Judge / Rubric)**:
-  - Structured evaluation rubric (accuracy, reasoning clarity, conciseness).
-  - Binary pass/fail or calibrated 1-5 score with reasoning extraction.
+### FR-3: The Sensor Pipeline (Multi-Tier Evaluation)
+- [ ] **Tier 1 (Deterministic Sensors - Mandatory Gate):**
+  - Schema validity and field type checking.
+  - Regex pattern matching and exact keyword assertions.
+  - Code linting (Ruff/Flake8), type checks (Mypy), and execution exit codes.
+  - Zero false-positive / zero-flake baseline.
+- [ ] **Tier 2 (Semantic & Tool Sensors):**
+  - Tool invocation validation: correct function name, valid parameter values, and valid invocation order.
+  - Semantic distance: cosine similarity against golden outputs using fast embeddings.
+- [ ] **Tier 3 (Model-as-a-Judge / Rubric Gate):**
+  - Structured evaluation rubrics (factual accuracy, reasoning clarity, adherence).
+  - Reference-free and reference-based judging with calibrated temperature=0 scoring.
 
-### FR-4: Test Bed & Golden Dataset Management
-- [ ] Support loading test cases from YAML/JSON files.
-- [ ] Test case schema must include:
-  - `id`: Unique test case identifier.
-  - `description`: Purpose of the test (normal path, edge case, adversarial).
-  - `input`: Prompt payload or task parameters.
-  - `expected`: Golden output, assertion rules, or tolerance thresholds.
-  - `tags`: Capability tags (e.g., `tool-use`, `reasoning`, `json-schema`, `smoke`).
+### FR-4: Dynamic Tool Scoping & Context Diet
+- [ ] Tool registry that supports grouping tools by task phases (e.g., `Discovery`, `Execution`, `Verification`).
+- [ ] Dynamic injector: Provide the model only with tools mapped to the active phase.
+- [ ] Context budgeter: Measure prompt token footprint and warn when guide files exceed recommended token ceilings (avoiding prompt bloat).
 
-### FR-5: Execution Engine & Telemetry
-- [ ] Parallel / async test runner with concurrency limits.
-- [ ] Token usage tracking (input tokens, output tokens, estimated API cost).
-- [ ] Latency and time-to-first-token (TTFT) metrics.
-- [ ] Request caching to avoid re-running identical prompts during evaluator tuning.
+### FR-5: State Durability & Step Checkpointing
+- [ ] Persist execution state, intermediate tool responses, and sensor outcomes to a structured session log (`jsonl` / SQLite).
+- [ ] Safe rollback: Revert state if a tool call leaves the environment in an invalid state.
+- [ ] Resume capability: Pick up interrupted runs without re-executing completed deterministic steps.
 
-### FR-6: Scorecard & Regression Diff Reporting
-- [ ] CLI scorecard output (terminal summary table with pass/fail counts).
-- [ ] Markdown / JSON report artifact generation.
-- [ ] Diff comparison tool: compare Run A (Baseline Model) vs Run B (Candidate Model) to highlight:
-  - Regressions (tests passed in A, failed in B).
-  - Improvements (tests failed in A, passed in B).
-  - Performance deltas (latency & cost changes).
+### FR-6: Test Bed & Golden Dataset Management
+- [ ] Load test cases from declarative YAML/JSON files.
+- [ ] Test case schema:
+  - `id`: Unique identifier (e.g., `extract-001`).
+  - `category`: Category (`smoke`, `edge_case`, `tool_use`, `adversarial`).
+  - `input`: Input prompt payload and parameters.
+  - `guides`: Optional specific task guidelines injected.
+  - `expected`: Golden references, expected schema, or deterministic assertions.
+  - `tolerance`: Permissible semantic variance band.
+
+### FR-7: Scorecard & Differential Regression Engine
+- [ ] CLI scorecard generator: Terminal table displaying Pass/Fail rate, latency (p50, p95), and token counts.
+- [ ] Exportable artifacts: Markdown summary and machine-readable JSON reports.
+- [ ] **Differential Comparator (`harness compare`)**:
+  - Compare Run A (Baseline Model) vs Run B (Candidate Model).
+  - Detect regressions (cases passed by A but broken by B).
+  - Highlight improvements, cost delta, and latency trade-offs.
 
 ---
 
 ## 4. Non-Functional Requirements (NFR)
 
-- **NFR-1 (Determinism & Flake Control)**: Evaluators must be deterministic wherever possible. LLM judges must use temperature=0 and fixed seeds.
-- **NFR-2 (Modularity)**: Adding a new model provider or evaluator should require implementing a single class without touching existing test cases or core runner code.
-- **NFR-3 (Developer Experience)**: Simple CLI commands (`harness run`, `harness compare`, `harness init`) and minimal boilerplates.
-- **NFR-4 (Zero Secret Leakage)**: API keys and credentials must be loaded via environment variables (`.env`) or standard secret managers, never committed to disk.
+* **NFR-1 (Determinism & Zero Flakes):** Sensor checks must be 100% deterministic. LLM-based evaluators must enforce fixed seeds and zero temperature.
+* **NFR-2 (Strict Isolation):** The harness must never expose model-specific quirks, headers, or raw SDK errors to downstream business logic.
+* **NFR-3 (Extensibility):** Adding a new provider adapter or custom evaluator must be a standalone class addition without modifying runner core code.
+* **NFR-4 (Security & Safe Execution):** Tool executions and code runners must operate within configured permission boundaries; API keys are sourced strictly from environment variables.
 
 ---
 
 ## 5. Directory Structure & Layout
+
 ```
 model-harness/
 ├── README.md
@@ -81,17 +128,18 @@ model-harness/
 ├── pyproject.toml
 ├── src/
 │   └── harness/
-│       ├── __init__.py
-│       ├── adapters/         # Model provider adapters (Gemini, Claude, OpenAI, Ollama)
-│       ├── contracts/        # Canonical schemas and validation loops
-│       ├── evaluators/       # Tier 1, 2, and 3 evaluators
-│       ├── runner/           # Execution engine, concurrency, metrics
+│       ├── adapters/         # Swappable model engines (Gemini, Claude, OpenAI, Ollama)
+│       ├── guards/           # Executable guards, Pydantic schemas, repair loops
+│       ├── sensors/          # Tier 1 deterministic, Tier 2 semantic, Tier 3 judges
+│       ├── tools/            # Scoped tool registries and dynamic injectors
+│       ├── state/            # Checkpoints, session logs, rollback handlers
+│       ├── runner/           # Async execution engine, concurrency, telemetry
 │       ├── storage/          # Baselines, caches, and report generators
 │       └── cli.py            # Command-line interface
 ├── tests/
-│   ├── unit/                 # Unit tests for the harness itself
-│   └── fixtures/             # Sample datasets and golden sets
+│   ├── unit/                 # Unit tests for the harness infrastructure
+│   └── fixtures/             # Mock responses and fixtures
 └── datasets/
-    ├── smoke.yaml            # Quick sanity test cases
-    └── benchmark_core.yaml   # Comprehensive evaluation suite
+    ├── smoke.yaml            # Sanity check suite
+    └── benchmark_core.yaml   # Comprehensive evaluation benchmark
 ```

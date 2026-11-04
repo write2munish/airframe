@@ -2,21 +2,55 @@
 
 > **A contract-first evaluation and execution harness for swappable LLMs and agentic workflows.**
 
+$$\text{Agent} = \text{Model} + \text{Harness}$$
+
+---
+
 ## Overview
 
-`model-harness` is a framework designed to decouple language models from downstream application logic. By treating the model as an interchangeable engine and enforcing strict output contracts, regression suites, and multi-tier evaluation gates, teams can swap providers or upgrade models with high confidence and zero downstream breakage.
+`model-harness` is an engineering chassis designed to decouple foundation models from agentic and application logic. Based on modern **Harness Engineering** principles, it treats models as interchangeable engines while providing the necessary steering, brakes, suspension, and diagnostic sensors to ensure production reliability.
 
 ---
 
-## Key Highlights
+## Core Architectural Pillars
 
-- **Contract-First Gateway**: Strict Pydantic / JSON Schema validation with automatic self-repair loops.
-- **Provider Agnostic**: Unified adapter layer for Google Gemini, Anthropic Claude, OpenAI, and local models (via Ollama / vLLM / LM Studio).
-- **Multi-Tier Evaluation**: Fast deterministic checks (Tier 1) $\rightarrow$ Semantic/tool assertions (Tier 2) $\rightarrow$ LLM Judge (Tier 3).
-- **Differential Regression Testing**: Compare candidate models against golden baselines with automated diff scorecards.
+* **Guides Before, Sensors After**:
+  * **Guides (Feedforward)**: Task contracts, canonical prompt profiles, and lean context diet.
+  * **Sensors (Feedback)**: Automated AST linters, type checks, schema validators, and deterministic test gates.
+* **Executable Guards Over Prose Rules**:
+  * Hard programmatic barriers (Pydantic v2 schemas, automated repair loops, permission sandboxes) rather than soft prompt suggestions.
+* **Dynamic Tool Scoping & Context Diet**:
+  * Prevents rule fatigue and parameter hallucinations by exposing only the 3–5 tools relevant to the active execution phase.
+* **Durable State & Reversible Checkpoints**:
+  * Step-level state tracking and rollback capability so failures don't trigger cascading amnesia or costly restarts.
+* **Differential Regression Testing**:
+  * Compare candidate model runs directly against golden baselines to detect regressions in output contracts, latency, and token cost.
 
 ---
 
-## Status
+## Project Structure
 
-Currently in **Requirements & Architecture Phase**. See [REQUIREMENTS.md](REQUIREMENTS.md) for detailed specifications.
+```
+model-harness/
+├── README.md
+├── REQUIREMENTS.md
+├── pyproject.toml
+├── src/
+│   └── harness/
+│       ├── adapters/         # Swappable model engines (Gemini, Claude, OpenAI, Ollama)
+│       ├── guards/           # Executable guards, Pydantic schemas, repair loops
+│       ├── sensors/          # Tier 1 deterministic, Tier 2 semantic, Tier 3 judges
+│       ├── tools/            # Scoped tool registries and dynamic injectors
+│       ├── state/            # Checkpoints, session logs, rollback handlers
+│       ├── runner/           # Async execution engine, concurrency, telemetry
+│       ├── storage/          # Baselines, caches, and report generators
+│       └── cli.py            # Command-line interface
+├── tests/                    # Unit and integration test suites
+└── datasets/                 # Declarative YAML/JSON test suites and golden sets
+```
+
+---
+
+## Detailed Specifications
+
+See **[REQUIREMENTS.md](REQUIREMENTS.md)** for full functional and non-functional requirements.

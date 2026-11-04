@@ -123,6 +123,7 @@ airframe/
 
 ---
 
-## Detailed Specifications
+## Detailed Specifications & Planning
 
-See **[REQUIREMENTS.md](REQUIREMENTS.md)** for full functional requirements (FR-1 through FR-15) and non-functional requirements (NFR-1 through NFR-5).
+* **[REQUIREMENTS.md](REQUIREMENTS.md)**: Full functional requirements (FR-1 through FR-15) and non-functional requirements (NFR-1 through NFR-5).
+* **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)**: 6-phase engineering roadmap, milestone deliverables, and critical path.

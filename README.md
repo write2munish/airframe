@@ -1,42 +1,44 @@
-# `model-harness`
+# ✈️ Airframe
 
-> **A contract-first evaluation and execution harness for swappable LLMs and agentic workflows.**
+> **The engineering chassis for AI agents and swappable foundation models.**
 
-$$\text{Agent} = \text{Model} + \text{Harness}$$
+$$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
 ---
 
 ## Overview
 
-`model-harness` is an engineering chassis designed to decouple foundation models from agentic and application logic. Based on modern **Harness Engineering** principles, it treats models as interchangeable engines while providing the necessary steering, brakes, suspension, and diagnostic sensors to ensure production reliability.
+In aerospace engineering, an **airframe** is the complete structural aircraft—including aerodynamics, flight controls, avionics, sensors, and structural safety barriers—built to operate independently of any specific propulsion unit. An airframe can mount a Pratt & Whitney, Rolls-Royce, or GE engine without changing the cockpit controls or safety tolerances.
+
+**Airframe** brings this exact paradigm to AI engineering. It decouples the underlying models from application logic, providing the guidance, executable guards, sensors, and telemetry necessary to hot-swap models (Gemini, Claude, GPT, Ollama/local models) with zero downstream turbulence or contract breakage.
 
 ---
 
 ## Core Architectural Pillars
 
 * **Guides Before, Sensors After**:
-  * **Guides (Feedforward)**: Task contracts, canonical prompt profiles, and lean context diet.
-  * **Sensors (Feedback)**: Automated AST linters, type checks, schema validators, and deterministic test gates.
+  * **Guides (Feedforward)**: Task contracts, canonical prompt profiles, and lean context diet to direct the model before execution without causing rule fatigue.
+  * **Sensors (Feedback)**: Automated AST linters, type checks, schema validators, and deterministic test gates to detect and catch errors after execution.
 * **Executable Guards Over Prose Rules**:
-  * Hard programmatic barriers (Pydantic v2 schemas, automated repair loops, permission sandboxes) rather than soft prompt suggestions.
+  * Hard programmatic boundaries (Pydantic v2 schemas, automated repair loops, permission sandboxes, token/byte ceilings) rather than soft prompt suggestions.
 * **Dynamic Tool Scoping & Context Diet**:
-  * Prevents rule fatigue and parameter hallucinations by exposing only the 3–5 tools relevant to the active execution phase.
+  * Prevents parameter hallucinations and decision paralysis by exposing only the 3–5 tools relevant to the active execution phase (e.g., Discovery vs. Execution vs. Verification).
 * **Durable State & Reversible Checkpoints**:
-  * Step-level state tracking and rollback capability so failures don't trigger cascading amnesia or costly restarts.
+  * Step-level session tracking and rollback handling so unexpected failures do not trigger cascading amnesia or costly restarts.
 * **Differential Regression Testing**:
-  * Compare candidate model runs directly against golden baselines to detect regressions in output contracts, latency, and token cost.
+  * Run candidate model engines directly against golden baselines with automated diff scorecards to track contract conformity, latency, and token cost drift.
 
 ---
 
 ## Project Structure
 
 ```
-model-harness/
+airframe/
 ├── README.md
 ├── REQUIREMENTS.md
 ├── pyproject.toml
 ├── src/
-│   └── harness/
+│   └── airframe/
 │       ├── adapters/         # Swappable model engines (Gemini, Claude, OpenAI, Ollama)
 │       ├── guards/           # Executable guards, Pydantic schemas, repair loops
 │       ├── sensors/          # Tier 1 deterministic, Tier 2 semantic, Tier 3 judges
@@ -44,7 +46,7 @@ model-harness/
 │       ├── state/            # Checkpoints, session logs, rollback handlers
 │       ├── runner/           # Async execution engine, concurrency, telemetry
 │       ├── storage/          # Baselines, caches, and report generators
-│       └── cli.py            # Command-line interface
+│       └── cli.py            # Command-line interface (`airframe run`, `airframe compare`)
 ├── tests/                    # Unit and integration test suites
 └── datasets/                 # Declarative YAML/JSON test suites and golden sets
 ```

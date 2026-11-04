@@ -1,15 +1,15 @@
-# Requirements Specification: Model Harness Engineering (`model-harness`)
+# Requirements Specification: Airframe (`airframe`)
 
 ## 1. Executive Summary & Core Formula
 
-The **Model Harness** (`model-harness`) is an evaluation, execution, and verification chassis designed to decouple large language models (LLMs) and agentic workflows from application logic. It allows engineering teams to benchmark, validate, and hot-swap underlying models (e.g., Gemini, Claude, GPT, Ollama/local models) with zero downstream regressions.
+**Airframe** (`airframe`) is an evaluation, execution, and verification chassis designed to decouple large language models (LLMs) and agentic workflows from application logic. It allows engineering teams to benchmark, validate, and hot-swap underlying models (e.g., Gemini, Claude, GPT, Ollama/local models) with zero downstream regressions.
 
 ### The Foundational Law
-$$\text{Agent} = \text{Model} + \text{Harness}$$
+$$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
-* **The Model is the Engine:** Provides raw token generation, semantic reasoning, and probabilistic predictions.
-* **The Harness is the Chassis:** Provides steering, brakes, fuel injection, suspension, and telemetry.
-* **The Core Premise:** Most agent failures (infinite loops, parameter hallucinations, rule amnesia) are **structural harness failures**, not model intelligence deficits. Tweaking prompts or waiting for next-gen models cannot fix a leaking chassis.
+* **The Engine (Model):** Provides raw token generation, semantic reasoning, and probabilistic predictions.
+* **The Airframe (Harness):** Provides flight controls (guides), avionics and sensors (feedback), structural firewalls (executable guards), and telemetry.
+* **The Core Premise:** Most agent failures (infinite loops, parameter hallucinations, rule amnesia) are **structural airframe failures**, not model intelligence deficits. Tweaking prompts or waiting for next-gen models cannot fix a compromised chassis.
 
 ---
 
@@ -17,7 +17,7 @@ $$\text{Agent} = \text{Model} + \text{Harness}$$
 
 ```mermaid
 flowchart LR
-    subgraph Harness["The Harness Architecture"]
+    subgraph Airframe["The Airframe Architecture"]
         direction TB
         G["Guides (Feedforward)\n• Task specs & prompt profiles\n• Scoped context diet\n• Phase-specific tools"]
         --> M["Model Engine\n(Interchangeable)"]
@@ -38,11 +38,11 @@ flowchart LR
 
 ### Principle 3: Context Diet & Dynamic Tool Scoping
 * Monolithic prompt bloat causes "rule fatigue" and attention degradation.
-* Exposing 30+ tools causes parameter hallucinations and selection paralysis. The harness dynamically filters and exposes only the 3–5 tools relevant to the active task phase.
+* Exposing 30+ tools causes parameter hallucinations and selection paralysis. The airframe dynamically filters and exposes only the 3–5 tools relevant to the active task phase.
 
 ### Principle 4: Durable State & Reversible Checkpointing
-* Models are strictly stateless; the harness is stateful.
-* Every meaningful action is checkpointed with rollback capability. If a step fails sensors or times out, the harness recovers without amnesia or rerunning previous successful steps.
+* Models are strictly stateless; the airframe is stateful.
+* Every meaningful action is checkpointed with rollback capability. If a step fails sensors or times out, the airframe recovers without amnesia or rerunning previous successful steps.
 
 ---
 
@@ -103,7 +103,7 @@ flowchart LR
 ### FR-7: Scorecard & Differential Regression Engine
 - [ ] CLI scorecard generator: Terminal table displaying Pass/Fail rate, latency (p50, p95), and token counts.
 - [ ] Exportable artifacts: Markdown summary and machine-readable JSON reports.
-- [ ] **Differential Comparator (`harness compare`)**:
+- [ ] **Differential Comparator (`airframe compare`)**:
   - Compare Run A (Baseline Model) vs Run B (Candidate Model).
   - Detect regressions (cases passed by A but broken by B).
   - Highlight improvements, cost delta, and latency trade-offs.
@@ -113,7 +113,7 @@ flowchart LR
 ## 4. Non-Functional Requirements (NFR)
 
 * **NFR-1 (Determinism & Zero Flakes):** Sensor checks must be 100% deterministic. LLM-based evaluators must enforce fixed seeds and zero temperature.
-* **NFR-2 (Strict Isolation):** The harness must never expose model-specific quirks, headers, or raw SDK errors to downstream business logic.
+* **NFR-2 (Strict Isolation):** Airframe must never expose model-specific quirks, headers, or raw SDK errors to downstream business logic.
 * **NFR-3 (Extensibility):** Adding a new provider adapter or custom evaluator must be a standalone class addition without modifying runner core code.
 * **NFR-4 (Security & Safe Execution):** Tool executions and code runners must operate within configured permission boundaries; API keys are sourced strictly from environment variables.
 
@@ -122,12 +122,12 @@ flowchart LR
 ## 5. Directory Structure & Layout
 
 ```
-model-harness/
+airframe/
 ├── README.md
 ├── REQUIREMENTS.md
 ├── pyproject.toml
 ├── src/
-│   └── harness/
+│   └── airframe/
 │       ├── adapters/         # Swappable model engines (Gemini, Claude, OpenAI, Ollama)
 │       ├── guards/           # Executable guards, Pydantic schemas, repair loops
 │       ├── sensors/          # Tier 1 deterministic, Tier 2 semantic, Tier 3 judges
@@ -135,9 +135,9 @@ model-harness/
 │       ├── state/            # Checkpoints, session logs, rollback handlers
 │       ├── runner/           # Async execution engine, concurrency, telemetry
 │       ├── storage/          # Baselines, caches, and report generators
-│       └── cli.py            # Command-line interface
+│       └── cli.py            # Command-line interface (`airframe run`, `airframe compare`)
 ├── tests/
-│   ├── unit/                 # Unit tests for the harness infrastructure
+│   ├── unit/                 # Unit tests for the airframe infrastructure
 │   └── fixtures/             # Mock responses and fixtures
 └── datasets/
     ├── smoke.yaml            # Sanity check suite

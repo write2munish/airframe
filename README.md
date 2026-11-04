@@ -4,6 +4,10 @@
 
 $$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Tests Passing](https://img.shields.io/badge/tests-20%20passed-brightgreen.svg)](tests/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ---
 
 ## Overview
@@ -11,31 +15,98 @@ $$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 In aerospace engineering, an **airframe** is the complete structural aircraft—including aerodynamics, flight controls, avionics, sensors, and structural safety barriers—built to operate independently of any specific propulsion unit. An airframe can mount a Pratt & Whitney, Rolls-Royce, or GE engine without changing the cockpit controls or safety tolerances.
 
 **Airframe** brings this exact paradigm to AI engineering. Beyond single-model evaluation, Airframe acts as an **Agent Operating System** designed for:
-* **Swappable Model Engines**: Decoupled adapters for Gemini, Claude, OpenAI, and local OSS models.
+* **Swappable Model Engines**: Decoupled adapters for Google Gemini, Anthropic Claude, OpenAI, and local OSS models (Ollama, vLLM).
+* **Executable Guards Over Prose Rules**: Programmatic Pydantic v2 schema enforcement and automated self-repair loops.
+* **Guides Before, Sensors After**: Multi-tier sensor pipeline (Tier 1 deterministic, Tier 2 semantic, Tier 3 LLM judge) with fast-fail short-circuiting to save token costs.
 * **Long-Horizon Autonomy**: Multi-shift execution and disk-externalized state (`plan.md`, `task_queue.json`).
 * **Multi-Agent Topologies**: Supervisor/Worker fleets with independent Evaluator-Optimizer loops.
-* **Dual-Layer Isolation**: Context window partitioning (discarding noisy scratch tokens) + Git Worktree filesystem sandboxing.
+* **Dual-Layer Isolation**: Context window partitioning (discarding noisy exploration tokens) + Git Worktree filesystem sandboxing.
 * **Self-Contained Workflow Packs**: Colocated domain packs under `workflows/<use-case>/`.
 
 ---
 
-## Core Architectural Pillars
+## ⚡ Installation & Quickstart
 
-* **Guides Before, Sensors After**:
-  * **Guides (Feedforward)**: Task contracts, canonical prompt profiles, and lean context diet to direct the model before execution without causing rule fatigue.
-  * **Sensors (Feedback)**: Automated AST linters, type checks, schema validators, and deterministic test gates to detect and catch errors after execution.
-* **Dual-Layer Isolation**:
-  * **Context Window Isolation**: Sub-agents run with private transcripts; 50k+ tokens of intermediate exploration are discarded from the supervisor's active context.
-  * **Filesystem Isolation (Git Worktrees)**: Parallel workers run in dedicated `git worktree` scratch directories, preventing file-clobbering and commit collisions.
-* **Supervisor / Worker Topologies**:
-  * Decouples high-level strategic planning from low-level tool execution. Includes independent **Evaluator-Optimizer** loops to eliminate self-evaluation bias.
-* **Long-Horizon Persistence & Multi-Shift Durability**:
-  * State is externalized to persistent disk files (`plan.md`, `task_queue.json`, `progress.log`).
-  * Automated **shift turnover** wipes bloated context windows and reboots fresh sessions seamlessly from disk.
-* **Executable Guards Over Prose Rules**:
-  * Hard programmatic boundaries (Pydantic v2 schemas, automated repair loops, permission sandboxes, token/byte ceilings) rather than soft prompt suggestions.
-* **Governance & Circuit Breakers**:
-  * Recursion depth ceilings, dollar/token budget limits, loop/stall detectors, and human-in-the-loop approval gates.
+See the full [**Installation Guide (INSTALLATION.md)**](INSTALLATION.md) for detailed environment and provider setup.
+
+### 1. Install via Pip
+
+```bash
+# Clone and install in editable mode with development dependencies:
+git clone https://github.com/write2munish/airframe.git
+cd airframe
+pip install -e ".[dev]"
+```
+
+### 2. Verify CLI
+
+```bash
+airframe --version
+airframe info
+```
+
+### 3. Run Automated Tests (20/20 Passing)
+
+```bash
+PYTHONPATH=src pytest tests/ -v
+```
+
+---
+
+## 🚀 30-Second Code Example
+
+### Swappable Engine with Executable Contract & Self-Repair
+
+```python
+import asyncio
+from pydantic import BaseModel, Field
+from airframe.adapters import get_adapter
+from airframe.guards import ExecutableGuard, PayloadBounds
+from airframe.sensors import PythonASTSensor, RegexSensor, SensorPipeline
+
+# 1. Define your canonical contract schema
+class GeneratedFunction(BaseModel):
+    function_name: str
+    docstring: str
+    code: str = Field(description="Executable Python code snippet.")
+
+async def main():
+    # 2. Pick any engine: 'gemini', 'anthropic', 'openai', or 'ollama'
+    # Swapping the engine requires changing just this one line!
+    engine = get_adapter(provider="gemini", model_name="gemini-2.0-flash")
+
+    # 3. Invoke with automatic schema validation and self-repair loop
+    output, resp = await engine.invoke_contract(
+        prompt="Write a Python function to calculate the Fibonacci sequence.",
+        schema=GeneratedFunction,
+    )
+    print(f"Generated function '{output.function_name}' ({resp.latency_ms}ms)")
+
+    # 4. Run through multi-tier sensors (Tier 1 deterministic AST check)
+    pipeline = SensorPipeline([
+        PythonASTSensor(),  # Validates generated code compiles to valid Python AST
+        RegexSensor(name="no_eval", pattern=r"\beval\(", must_match=False), # Security guard
+    ])
+    results = await pipeline.run(output.code)
+    for res in results:
+        print(f"[{'PASS' if res.passed else 'FAIL'}] Tier {res.tier} {res.sensor_name}: {res.message}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+---
+
+## 🗺️ Roadmap & Implementation Status
+
+| Milestone | Subsystem | Key Capabilities | Status |
+| :---: | :--- | :--- | :---: |
+| **Phase 1** | **Core Engine & Adapters** | Universal `ModelAdapter`, telemetry, Gemini/Claude/OpenAI/Ollama adapters, Jinja2 prompt profiler, CLI | ✅ **Completed** |
+| **Phase 2** | **Guards & Sensor Pipeline** | `ExecutableGuard` (Pydantic v2), byte/line ceilings, Tier 1-3 sensors, fast-fail short-circuiting | ✅ **Completed** |
+| **Phase 3** | **Dual-Layer Isolation** | `AgentBlueprint` manifests, `WorktreeManager` (Git worktrees), Context window partitioner | ⏳ *In Progress* |
+| **Phase 4** | **Multi-Agent & IPC** | Async typed mailbox, Supervisor-Worker coordination, Evaluator-Optimizer loop, cancellation | 📋 *Planned* |
+| **Phase 5** | **Long-Horizon Shifts** | State externalizer (`plan.md`), shift turnover engine, budget caps, loop/stall detectors | 📋 *Planned* |
+| **Phase 6** | **Workflows & Diff Engine**| `workflows/` pack loader, differential regression comparator, `workflows/pr-reviewer` pack | 📋 *Planned* |
 
 ---
 
@@ -89,41 +160,39 @@ airframe init workflow customer-support
 
 ```
 airframe/
-├── README.md
-├── REQUIREMENTS.md
-├── pyproject.toml
-│
-├── workflows/                        # Self-contained use-case packs
-│   ├── pr-reviewer/                  # Example workflow
-│   └── feature-builder/              # Example workflow
+├── INSTALLATION.md                   # Installation & provider configuration guide
+├── IMPLEMENTATION_PLAN.md            # 6-phase engineering roadmap
+├── README.md                         # Project overview and quickstart
+├── REQUIREMENTS.md                   # Complete architectural requirements (FR-1 to FR-15)
+├── pyproject.toml                    # Package metadata and dependencies
 │
 ├── src/
 │   └── airframe/
 │       ├── adapters/                 # Swappable model engines (Gemini, Claude, OpenAI, Ollama)
-│       ├── blueprints/               # Agent manifests & schema validation (FR-8)
-│       ├── orchestration/            # Supervisor, topologies, shift turnover (FR-10, FR-11)
-│       ├── isolation/                # Git worktree managers, transcript partitioners (FR-9)
-│       ├── ipc/                      # Async mailbox, event bus, reactive wakeups (FR-12)
-│       ├── guards/                   # Executable guards, Pydantic schemas, repair loops (FR-2)
-│       ├── sensors/                  # Tier 1, 2, and 3 evaluators (FR-3)
-│       ├── tools/                    # Tool registry, dynamic injector (FR-4)
-│       ├── governance/               # Budget trackers, loop detectors, HITL gates (FR-13)
-│       ├── state/                    # State externalization (plan.md, task_queue.json) (FR-11)
-│       ├── telemetry/                # OpenTelemetry traces, session replay (FR-14)
-│       ├── runner/                   # Core async execution engine
-│       └── cli.py                    # CLI (`airframe run`, `airframe compare`, `airframe init`)
+│       ├── guards/                   # Executable guards, Pydantic schemas, repair loops
+│       ├── sensors/                  # Tier 1 deterministic, Tier 2 semantic, Tier 3 judges
+│       ├── blueprints/               # Agent manifests & schema validation (Phase 3)
+│       ├── isolation/                # Git worktree managers, transcript partitioners (Phase 3)
+│       ├── orchestration/            # Supervisor, topologies, shift turnover (Phase 4, 5)
+│       ├── ipc/                      # Async mailbox, event bus, reactive wakeups (Phase 4)
+│       ├── tools/                    # Tool registry, dynamic injector
+│       ├── governance/               # Budget trackers, loop detectors, HITL gates (Phase 5)
+│       ├── state/                    # State externalization (plan.md, task_queue.json) (Phase 5)
+│       ├── telemetry/                # OpenTelemetry traces, session replay
+│       └── cli.py                    # CLI (`airframe info`, `airframe run`, `airframe compare`)
 │
 ├── tests/
-│   ├── unit/                         # Unit tests for airframe modules
-│   └── integration/                  # End-to-end multi-agent & worktree tests
-└── datasets/
-    ├── smoke.yaml                    # Global engine sanity checks
-    └── benchmark_core.yaml           # Global provider benchmark suite
+│   └── unit/
+│       ├── test_adapters.py          # 8 adapter & contract tests (Passing)
+│       ├── test_guards_and_sensors.py# 10 guard & sensor tests (Passing)
+│       └── test_cli.py               # 2 CLI tests (Passing)
+└── workflows/                        # Self-contained use-case packs
 ```
 
 ---
 
 ## Detailed Specifications & Planning
 
+* **[INSTALLATION.md](INSTALLATION.md)**: Full setup instructions and model provider credentials guide.
 * **[REQUIREMENTS.md](REQUIREMENTS.md)**: Full functional requirements (FR-1 through FR-15) and non-functional requirements (NFR-1 through NFR-5).
 * **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)**: 6-phase engineering roadmap, milestone deliverables, and critical path.

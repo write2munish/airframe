@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "airframe"
+version = "0.1.0"
+description = "The engineering chassis and operating system for reliable, long-horizon AI agents and swappable model engines."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Munish Gupta", email = "write2munish@gmail.com" }
+]
+keywords = [
+    "ai-agents",
+    "harness-engineering",
+    "llm-evaluation",
+    "model-agnostic",
+    "pydantic",
+    "orchestration",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "pydantic>=2.7.0",
+    "httpx>=0.27.0",
+    "typer[all]>=0.12.0",
+    "rich>=13.7.0",
+    "pyyaml>=6.0.1",
+    "jinja2>=3.1.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "respx>=0.21.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[project.scripts]
+airframe = "airframe.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/airframe"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true

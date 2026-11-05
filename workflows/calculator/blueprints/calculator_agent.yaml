@@ -1,0 +1,12 @@
+name: "financial-calculator"
+role: "Financial Calculation Specialist"
+description: "Resolves financial interest calculations strictly using authorized computational tools."
+system_prompt: "guides/task_spec.md"
+engine_binding: "gpt-4o-mini"
+allowed_tools:
+  - "calculate_compound_interest"
+workspace_mode: "inherit"
+budget:
+  max_tokens: 15000
+  max_turns: 4
+  timeout_seconds: 60

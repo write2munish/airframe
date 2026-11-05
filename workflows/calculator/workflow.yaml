@@ -1,0 +1,16 @@
+id: "single-tool-calculator"
+version: "1.0.0"
+description: "Single-tool calculator workflow: delegates complex financial formulas to verified mathematical tools."
+topology: "single-agent"
+workspace_mode: "inherit"
+
+governance:
+  max_turns: 5
+  timeout_seconds: 60
+  stall_threshold: 2
+
+entrypoint_agent: "financial-calculator"
+agents:
+  - "blueprints/calculator_agent.yaml"
+
+testbed: "testbed/smoke.yaml"

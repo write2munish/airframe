@@ -97,3 +97,8 @@ class ExecutableGuard(Generic[T]):
                 message=f"Output fails schema '{self.schema.__name__}': {err}",
                 details={"errors": err.errors(), "raw_json": clean_json},
             ) from err
+
+    def to_sensor(self) -> Any:
+        """Convert this guard into a Tier 1 SchemaSensor for pipeline evaluation."""
+        from airframe.sensors.schema import SchemaSensor
+        return SchemaSensor(schema=self.schema, bounds=self.bounds)

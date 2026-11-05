@@ -1,9 +1,11 @@
-"""Governance, circuit breakers, and budget tracking for autonomous agent runs."""
+"""Governance, circuit breakers, and unified budget tracking for autonomous agent runs."""
 
 from __future__ import annotations
 
 import re
-from typing import Callable
+from typing import Any, Callable
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class GovernanceError(RuntimeError):
@@ -31,6 +33,40 @@ class ApprovalRejectedError(GovernanceError):
     pass
 
 
+class Budget(BaseModel):
+    """Unified resource quotas and circuit breakers for workflows and agents.
+
+    Eliminates duplicated budget schemas between workflow manifests and agent blueprints.
+    Workflow defines default limits; individual agent blueprints can override.
+    """
+
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")
+
+    max_tokens: int = Field(default=150_000, description="Maximum total tokens allowed before halting.")
+    max_turns: int = Field(default=20, description="Maximum turn iterations allowed.")
+    timeout_seconds: int = Field(default=600, description="Max wall-clock seconds before timing out.")
+    max_cost_usd: float | None = Field(
+        default=None,
+        alias="max_budget_usd",
+        description="Maximum spend ceiling in USD.",
+    )
+    stall_threshold: int = Field(default=3, description="Consecutive failure count to trip stall detector.")
+
+    def merge_with_override(self, override: Budget | None) -> Budget:
+        """Create a merged budget where non-default override values take precedence."""
+        if override is None:
+            return self.model_copy()
+        data = self.model_dump()
+        override_data = override.model_dump(exclude_unset=True)
+        data.update(override_data)
+        return Budget.model_validate(data)
+
+
+# Alias for backward compatibility
+AgentBudget = Budget
+GovernanceSpec = Budget
+
+
 class BudgetTracker:
     """Monitors token usage and financial spend, enforcing hard budget ceilings."""
 
@@ -38,9 +74,15 @@ class BudgetTracker:
         self,
         max_tokens: int | None = None,
         max_cost_usd: float | None = None,
+        budget: Budget | None = None,
     ) -> None:
-        self.max_tokens = max_tokens
-        self.max_cost_usd = max_cost_usd
+        if budget is not None:
+            self.max_tokens = budget.max_tokens
+            self.max_cost_usd = budget.max_cost_usd
+        else:
+            self.max_tokens = max_tokens
+            self.max_cost_usd = max_cost_usd
+
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self.total_tokens = 0

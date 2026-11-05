@@ -19,6 +19,7 @@ __all__ = [
     "AnthropicAdapter",
     "PromptProfiler",
     "get_adapter",
+    "resolve_adapter",
 ]
 
 
@@ -69,3 +70,33 @@ def get_adapter(
             f"Unsupported provider: '{provider}'. "
             f"Supported providers: 'openai', 'gemini', 'anthropic', 'ollama', 'vllm'."
         )
+
+
+def resolve_adapter(
+    engine: str,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    **kwargs: Any,
+) -> ModelAdapter:
+    """Resolve an engine identifier string into an instantiated ModelAdapter.
+
+    Supports formats like:
+      - 'gemini-2.0-flash' -> provider: 'gemini'
+      - 'gpt-4o', 'gpt-4o-mini' -> provider: 'openai'
+      - 'claude-3-5-sonnet' -> provider: 'anthropic'
+      - 'provider/model' (e.g. 'ollama/llama3', 'openai/gpt-4o')
+    """
+    engine_clean = engine.strip()
+    if "/" in engine_clean:
+        provider, model_name = engine_clean.split("/", 1)
+        return get_adapter(provider=provider, model_name=model_name, api_key=api_key, base_url=base_url, **kwargs)
+
+    lower = engine_clean.lower()
+    if lower.startswith("gemini"):
+        return get_adapter(provider="gemini", model_name=engine_clean, api_key=api_key, base_url=base_url, **kwargs)
+    elif lower.startswith("claude"):
+        return get_adapter(provider="anthropic", model_name=engine_clean, api_key=api_key, base_url=base_url, **kwargs)
+    elif lower.startswith("gpt") or lower.startswith("o1") or lower.startswith("o3") or lower.startswith("o4"):
+        return get_adapter(provider="openai", model_name=engine_clean, api_key=api_key, base_url=base_url, **kwargs)
+    else:
+        return get_adapter(provider="openai_compatible", model_name=engine_clean, api_key=api_key, base_url=base_url, **kwargs)

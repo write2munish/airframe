@@ -1,0 +1,8 @@
+- id: "weather-smoke-01"
+  description: "Bengaluru rain forecast tomorrow at 3 PM"
+  input:
+    query: "Will it rain in Bengaluru tomorrow at 3 PM?"
+    location: "Bengaluru"
+    expected_lat: 12.9716
+    expected_lon: 77.5946
+    expected_hour: 15

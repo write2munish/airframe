@@ -8,16 +8,12 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field
 
+from airframe.governance.circuit_breakers import Budget
+
 WorkspaceMode = Literal["inherit", "branch", "sandbox"]
 
-
-class AgentBudget(BaseModel):
-    """Resource quotas and circuit breakers for an agent instance."""
-
-    max_tokens: int = Field(default=150_000, description="Maximum total tokens allowed before halting.")
-    max_turns: int = Field(default=25, description="Maximum turn iterations allowed.")
-    timeout_seconds: int = Field(default=600, description="Max wall-clock seconds before timing out.")
-    max_cost_usd: float | None = Field(default=None, description="Maximum spend ceiling in USD.")
+# Alias for backward compatibility; canonical model is Budget
+AgentBudget = Budget
 
 
 class AgentBlueprint(BaseModel):

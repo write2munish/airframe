@@ -1,6 +1,7 @@
 """Multi-tier sensor pipeline and evaluation modules."""
 
 from airframe.sensors.base import Sensor, SensorResult, SensorPipeline
+from airframe.sensors.schema import SchemaSensor
 from airframe.sensors.tier1_deterministic import (
     ExitCodeSensor,
     KeywordSensor,
@@ -22,6 +23,7 @@ __all__ = [
     "Sensor",
     "SensorResult",
     "SensorPipeline",
+    "SchemaSensor",
     "PythonASTSensor",
     "RegexSensor",
     "KeywordSensor",

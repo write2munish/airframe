@@ -41,6 +41,58 @@ def test_workflow_scaffolding(tmp_path: Path):
     assert loaded.id == "customer-support"
 
 
+def test_lightweight_single_file_workflow(tmp_path: Path):
+    """Test single-file inline workflow without requiring 6 mandatory subdirectories."""
+    import yaml
+    from airframe.governance.circuit_breakers import Budget
+
+    # 1. Test lightweight scaffold option
+    light_dir = init_workflow_scaffold(tmp_path, name="simple-task", lightweight=True)
+    assert (light_dir / "workflow.yaml").exists()
+    assert (light_dir / "tools.py").exists()
+    assert not (light_dir / "blueprints").exists()  # Clean: no empty subdirectories!
+
+    pack = load_workflow(light_dir)
+    assert pack.id == "simple-task"
+    bps = pack.load_blueprints()
+    assert len(bps) == 1
+    assert bps[0].name == "worker"
+    assert "sample_tool" in bps[0].allowed_tools
+
+    # 2. Test direct single-file YAML loading with Budget merging
+    custom_yaml = tmp_path / "inline_calculator.yaml"
+    custom_yaml.write_text(
+        yaml.dump({
+            "id": "inline-calc",
+            "topology": "single-agent",
+            "system_prompt": "You are a fast calculator assistant.",
+            "tools": ["calculate"],
+            "governance": {
+                "max_turns": 5,
+                "timeout_seconds": 60,
+                "max_budget_usd": 0.50,
+            },
+        }),
+        encoding="utf-8",
+    )
+
+    calc_pack = load_workflow(custom_yaml)
+    assert calc_pack.id == "inline-calc"
+    calc_bps = calc_pack.load_blueprints()
+    assert len(calc_bps) == 1
+    assert calc_bps[0].system_prompt == "You are a fast calculator assistant."
+    assert calc_bps[0].budget.max_turns == 5
+    assert calc_bps[0].budget.max_cost_usd == 0.50
+
+    # 3. Test budget merge_with_override
+    wf_budget = Budget(max_tokens=100_000, max_turns=10, max_cost_usd=2.0)
+    agent_override = Budget(max_turns=3)
+    merged = wf_budget.merge_with_override(agent_override)
+    assert merged.max_tokens == 100_000
+    assert merged.max_turns == 3
+    assert merged.max_cost_usd == 2.0
+
+
 def test_differential_regression_comparison():
     """Test compare_scorecards correctly identifies regressions and improvements."""
     base_cases = [

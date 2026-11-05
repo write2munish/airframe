@@ -2,8 +2,10 @@
 
 from airframe.orchestration.evaluator_optimizer import (
     EvaluatorOptimizerLoop,
+    FeedbackLoop,
     IterationRecord,
     OptimizationResult,
+    run_with_retry,
 )
 from airframe.orchestration.shift import ShiftTurnoverEngine
 from airframe.orchestration.supervisor import (
@@ -14,8 +16,10 @@ from airframe.orchestration.supervisor import (
 
 __all__ = [
     "EvaluatorOptimizerLoop",
+    "FeedbackLoop",
     "IterationRecord",
     "OptimizationResult",
+    "run_with_retry",
     "ShiftTurnoverEngine",
     "SubtaskSpec",
     "SupervisorAgent",

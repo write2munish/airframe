@@ -102,19 +102,11 @@ class ModelAdapter(ABC):
     ) -> tuple[T, ModelResponse]:
         """Execute a completion bound to an executable Pydantic schema contract with self-repair.
 
-        Args:
-            prompt: Task prompt payload.
-            schema: Target Pydantic model class.
-            system_prompt: Optional steering instructions.
-            max_retries: Maximum self-repair attempts on validation failure.
-            **kwargs: Invocation overrides.
-
-        Returns:
-            Tuple of (validated_pydantic_instance, last_model_response).
-
-        Raises:
-            RuntimeError: If schema validation fails after max_retries.
+        Delegates to the canonical run_with_retry feedback control loop and SchemaSensor.
         """
+        from airframe.orchestration.evaluator_optimizer import run_with_retry
+        from airframe.sensors.schema import SchemaSensor
+
         json_schema_spec = json.dumps(schema.model_json_schema(), indent=2)
         guidance = (
             f"\n\n[CONTRACT REQUIREMENT]\n"
@@ -123,40 +115,51 @@ class ModelAdapter(ABC):
             f"Return ONLY valid JSON. No conversational preamble or trailing commentary."
         )
 
-        current_prompt = prompt + guidance
+        sensor = SchemaSensor(schema=schema)
         last_response: ModelResponse | None = None
+        attempt_count = 0
 
-        for attempt in range(max_retries + 1):
-            last_response = await self.invoke(
-                prompt=current_prompt,
-                system_prompt=system_prompt,
-                **kwargs,
-            )
-
-            clean_json = extract_json_payload(last_response.content)
-
-            try:
-                validated_obj = schema.model_validate_json(clean_json)
-                return validated_obj, last_response
-            except (ValidationError, json.JSONDecodeError) as err:
-                if attempt == max_retries:
-                    raise RuntimeError(
-                        f"Executable contract violation for schema '{schema.__name__}' "
-                        f"after {max_retries} self-repair retries.\n"
-                        f"Final Error: {err}\n"
-                        f"Raw Model Output:\n{last_response.content}"
-                    ) from err
-
-                # Formulate targeted self-repair feedback prompt
-                current_prompt = (
-                    f"{prompt}\n\n"
-                    f"[VALIDATION FAILED - RETRY ATTEMPT {attempt + 1}/{max_retries}]\n"
+        async def generator(base_prompt: str, critique: str | None) -> str:
+            nonlocal last_response, attempt_count
+            attempt_count += 1
+            if critique is None:
+                call_prompt = base_prompt + guidance
+            else:
+                call_prompt = (
+                    f"{base_prompt}\n\n"
+                    f"[VALIDATION FAILED - RETRY ATTEMPT {attempt_count - 1}/{max_retries}]\n"
                     f"Your previous output failed validation against the schema with the following error:\n"
-                    f"```\n{err}\n```\n"
+                    f"```\n{critique}\n```\n"
                     f"Raw payload received:\n"
-                    f"```\n{last_response.content}\n```\n"
+                    f"```\n{last_response.content if last_response else ''}\n```\n"
                     f"Please correct the error and return ONLY valid JSON matching this schema:\n"
                     f"```json\n{json_schema_spec}\n```"
                 )
 
-        raise RuntimeError("Unexpected exit from contract validation loop.")
+            last_response = await self.invoke(
+                prompt=call_prompt,
+                system_prompt=system_prompt,
+                **kwargs,
+            )
+            return last_response.content
+
+        opt_result = await run_with_retry(
+            initial_prompt=prompt,
+            generator_fn=generator,
+            sensors=sensor,
+            max_retries=max_retries,
+        )
+
+        if not opt_result.passed or last_response is None:
+            last_err = opt_result.history[-1].critique if opt_result.history else "Validation failed"
+            raw_content = last_response.content if last_response else ""
+            raise RuntimeError(
+                f"Executable contract violation for schema '{schema.__name__}' "
+                f"after {max_retries} self-repair retries.\n"
+                f"Final Error: {last_err}\n"
+                f"Raw Model Output:\n{raw_content}"
+            )
+
+        clean_json = extract_json_payload(opt_result.final_candidate)
+        validated_obj = schema.model_validate_json(clean_json)
+        return validated_obj, last_response

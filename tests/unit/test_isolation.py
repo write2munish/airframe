@@ -103,3 +103,29 @@ def test_worktree_manager_lifecycle(tmp_path: Path):
     # Verify branch was deleted
     branches = subprocess.run(["git", "branch"], cwd=repo_dir, check=True, capture_output=True, text=True).stdout
     assert "airframe/agent-42" not in branches
+
+
+def test_get_workspace_dispatcher(tmp_path: Path):
+    """Test get_workspace() factory cleanly dispatches inherit, sandbox, and branch strategies."""
+    from airframe.isolation import get_workspace, SharedWorkspace, SandboxWorkspace, WorktreeWorkspace
+
+    # 1. Inherit mode
+    ws_inherit = get_workspace(mode="inherit", repo_path=tmp_path)
+    assert isinstance(ws_inherit, SharedWorkspace)
+    with ws_inherit as path:
+        assert path == tmp_path.resolve()
+
+    # 2. Sandbox mode
+    ws_sandbox = get_workspace(mode="sandbox", agent_id="tester")
+    assert isinstance(ws_sandbox, SandboxWorkspace)
+    created_path = None
+    with ws_sandbox as path:
+        created_path = path
+        assert path.exists()
+        (path / "scratch.txt").write_text("temp", encoding="utf-8")
+    assert created_path is not None
+    assert not created_path.exists()  # Cleaned up
+
+    # 3. Invalid mode
+    with pytest.raises(ValueError, match="Unsupported workspace_mode"):
+        get_workspace(mode="unknown_mode")

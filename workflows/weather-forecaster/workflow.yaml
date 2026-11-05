@@ -1,0 +1,13 @@
+id: weather-forecaster
+version: "1.0.0"
+description: "Deterministic Weather Forecaster with decoupled tools, payload pruning, and zero hallucination"
+topology: single-agent
+workspace_mode: inherit
+entrypoint_agent: meteorology-agent
+agents:
+  - blueprints/weather_agent.yaml
+testbed: testbed/smoke.yaml
+governance:
+  max_turns: 6
+  timeout_seconds: 60
+  max_cost_usd: 0.10

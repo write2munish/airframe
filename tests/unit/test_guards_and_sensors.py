@@ -201,3 +201,23 @@ def test_sensor_pipeline_fast_fail_short_circuit():
     assert results[1].passed is False
     assert results[1].diagnostics.get("skipped") is True
     assert judge_called is False  # Verified zero judge LLM invocations!
+
+
+def test_schema_sensor_and_guard_adaptation():
+    """Test SchemaSensor validates JSON and integrates with ExecutableGuard.to_sensor()."""
+    from airframe.sensors.schema import SchemaSensor
+
+    guard = ExecutableGuard(schema=SampleProfile)
+    sensor = guard.to_sensor()
+    assert isinstance(sensor, SchemaSensor)
+    assert sensor.tier == 1
+
+    # Valid payload
+    valid_res = asyncio.run(sensor.evaluate(json.dumps({"user_id": 99, "username": "batman"})))
+    assert valid_res.passed is True
+    assert valid_res.diagnostics["data"]["username"] == "batman"
+
+    # Invalid payload (missing username)
+    invalid_res = asyncio.run(sensor.evaluate(json.dumps({"user_id": 99})))
+    assert invalid_res.passed is False
+    assert "validation failed" in invalid_res.message.lower()

@@ -104,3 +104,33 @@ class EvaluatorOptimizerLoop:
             iterations=len(history),
             history=history,
         )
+
+
+# Canonical alias
+FeedbackLoop = EvaluatorOptimizerLoop
+
+
+async def run_with_retry(
+    initial_prompt: str,
+    generator_fn: Callable[[str, str | None], Coroutine[Any, Any, str]],
+    sensors: SensorPipeline | list[Any] | Any,
+    max_retries: int = 3,
+    context: dict[str, Any] | None = None,
+) -> OptimizationResult:
+    """Canonical retry-with-critique primitive: generate -> sensor check -> critique -> retry.
+
+    Unifies executable schema contract enforcement and multi-tier evaluator-optimizer loops into
+    a single reusable feedback control loop.
+    """
+    if isinstance(sensors, SensorPipeline):
+        pipeline = sensors
+    elif isinstance(sensors, list):
+        pipeline = SensorPipeline(sensors=sensors)
+    else:
+        if hasattr(sensors, "to_sensor"):
+            pipeline = SensorPipeline(sensors=[sensors.to_sensor()])
+        else:
+            pipeline = SensorPipeline(sensors=[sensors])
+
+    loop = EvaluatorOptimizerLoop(sensor_pipeline=pipeline, max_iterations=max_retries + 1)
+    return await loop.run(initial_prompt=initial_prompt, generator_fn=generator_fn, context=context)

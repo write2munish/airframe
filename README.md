@@ -5,7 +5,7 @@
 $$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/tests-40%20passed-brightgreen.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-47%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -18,6 +18,9 @@ In aerospace engineering, an **airframe** is the complete structural aircraft—
 * **Swappable Model Engines**: Decoupled adapters for Google Gemini, Anthropic Claude, OpenAI, and local OSS models (Ollama, vLLM).
 * **Executable Guards Over Prose Rules**: Programmatic Pydantic v2 schema enforcement and automated self-repair loops.
 * **Guides Before, Sensors After**: Multi-tier sensor pipeline (Tier 1 deterministic, Tier 2 semantic, Tier 3 LLM judge) with fast-fail short-circuiting to save token costs.
+* **Unified Feedback Loop & Contract Repair**: Canonical `run_with_retry` / `FeedbackLoop` primitive where executable schema contracts operate as standard Tier 1 `SchemaSensor` components.
+* **Unified Workspace Isolation Dispatcher**: Single `get_workspace(mode, agent_id, repo_path)` factory supporting `"inherit"` (shared), `"branch"` (Git worktree), and `"sandbox"` (ephemeral tempdir).
+* **De-duped Governance & Lightweight Packs**: Single shared `Budget` model with `merge_with_override`, supporting both inline single-file workflows and full multi-agent directories.
 * **Long-Horizon Autonomy**: Multi-shift execution and disk-externalized state (`plan.md`, `task_queue.json`).
 * **Multi-Agent Topologies**: Supervisor/Worker fleets with independent Evaluator-Optimizer loops.
 * **Dual-Layer Isolation**: Context window partitioning (discarding noisy exploration tokens) + Git Worktree filesystem sandboxing.
@@ -139,8 +142,11 @@ workflows/<use-case-name>/
 ### CLI Workflow Commands
 
 ```bash
-# Execute a workflow with input parameters
-airframe run workflows/pr-reviewer --input pr_number=42
+# Execute a workflow end-to-end with real model adapter and contract validation
+airframe run workflows/calculator -i "Calculate compound interest on ₹10,000 at 5% for 3 years"
+
+# Execute in deterministic dry-run verification mode (no API key required)
+airframe run workflows/weather-forecaster -i "Will it rain in Bengaluru tomorrow at 3 PM?" --mock
 
 # Run local regression testbed
 airframe test workflows/pr-reviewer
@@ -150,7 +156,10 @@ airframe compare workflows/pr-reviewer \
   --baseline gemini-2.0-flash \
   --candidate claude-3-5-sonnet
 
-# Scaffold a new workflow boilerplate
+# Scaffold a minimal, single-file workflow (lightweight mode, no empty subdirectories)
+airframe init workflow my-task --light
+
+# Scaffold a full multi-agent workflow pack
 airframe init workflow customer-support
 ```
 

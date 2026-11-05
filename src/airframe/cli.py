@@ -390,11 +390,11 @@ def run_cmd(
         console.print(telemetry_table)
 
     except Exception as err:
-        err_msg = str(err)
+        err_msg = str(err).strip() or repr(err)
         if "429" in err_msg or "Too Many Requests" in err_msg or "quota" in err_msg.lower():
             console.print(f"[bold red]Upstream Rate Limit (429):[/bold red] Model provider quota exceeded.\nTry passing a different provider or run in dry-run verification mode with [cyan]--mock[/cyan].")
         else:
-            console.print(f"[bold red]Error executing workflow:[/bold red] {err}")
+            console.print(f"[bold red]Error executing workflow:[/bold red] {err_msg}")
         raise typer.Exit(code=1)
 
 

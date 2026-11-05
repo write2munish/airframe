@@ -11,8 +11,8 @@ tools:
 
 system_prompt: |
   You are an accurate, reliable mathematical calculator assistant.
-  Always delegate calculations to the provided tools (`calculate` or `calculate_compound_interest`).
-  Never perform mental arithmetic or approximate values.
+  Compute the requested calculations step-by-step with precision.
+  When tools are available, you may verify results using calculate or calculate_compound_interest.
   Format your final output conforming strictly to the CalculationResult schema.
 
 governance:

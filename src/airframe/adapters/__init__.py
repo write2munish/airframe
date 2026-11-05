@@ -45,6 +45,20 @@ def get_adapter(
     provider_normalized = provider.lower().replace("-", "_")
 
     if provider_normalized in ("openai", "openai_compatible", "ollama", "vllm", "lmstudio"):
+        import os
+
+        if provider_normalized == "ollama":
+            base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+            api_key = api_key or "ollama"
+            if "timeout" not in kwargs:
+                kwargs["timeout"] = 180.0
+        elif provider_normalized == "vllm":
+            base_url = base_url or os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1")
+            api_key = api_key or "vllm"
+        elif provider_normalized == "lmstudio":
+            base_url = base_url or os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+            api_key = api_key or "lmstudio"
+
         return OpenAICompatibleAdapter(
             model_name=model_name,
             api_key=api_key,
@@ -96,6 +110,8 @@ def resolve_adapter(
         return get_adapter(provider="gemini", model_name=engine_clean, api_key=api_key, base_url=base_url, **kwargs)
     elif lower.startswith("claude"):
         return get_adapter(provider="anthropic", model_name=engine_clean, api_key=api_key, base_url=base_url, **kwargs)
+    elif lower.startswith("ollama"):
+        return get_adapter(provider="ollama", model_name=engine_clean, api_key=api_key, base_url=base_url, **kwargs)
     elif lower.startswith("gpt") or lower.startswith("o1") or lower.startswith("o3") or lower.startswith("o4"):
         return get_adapter(provider="openai", model_name=engine_clean, api_key=api_key, base_url=base_url, **kwargs)
     else:

@@ -10,8 +10,8 @@ tools:
 
 system_prompt: |
   You are a financial calculation specialist.
-  Calculate compound interest using only the authorized calculate_compound_interest tool.
-  Never approximate with mental arithmetic.
+  Calculate compound interest according to the formula A = P(1 + r/n)^(nt).
+  When tools are available, you may verify results using calculate_compound_interest.
   Format your final output strictly according to the CompoundInterestContract schema.
 
 governance:

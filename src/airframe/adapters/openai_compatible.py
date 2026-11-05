@@ -70,7 +70,11 @@ class OpenAICompatibleAdapter(ModelAdapter):
             data = response.json()
         latency_ms = (time.perf_counter() - start_time) * 1000.0
 
-        content = data["choices"][0]["message"]["content"] or ""
+        choice_msg = data["choices"][0]["message"]
+        content = choice_msg.get("content") or ""
+        if not content:
+            # Fallback for reasoning models (e.g. DeepSeek-R1, thinking LLMs) that put thoughts in reasoning
+            content = choice_msg.get("reasoning_content") or choice_msg.get("reasoning") or ""
 
         # Extract normalized usage
         raw_usage = data.get("usage", {})

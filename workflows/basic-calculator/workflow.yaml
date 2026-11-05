@@ -1,0 +1,24 @@
+id: "basic-calculator"
+version: "1.0.0"
+description: "Lightweight calculator workflow demonstrating Airframe lightened scaffolding with zero folder bloat."
+topology: "single-agent"
+workspace_mode: "inherit"
+entrypoint_agent: "calculator"
+engine_binding: "gemini-2.0-flash"
+tools:
+  - "calculate"
+  - "calculate_compound_interest"
+
+system_prompt: |
+  You are an accurate, reliable mathematical calculator assistant.
+  Always delegate calculations to the provided tools (`calculate` or `calculate_compound_interest`).
+  Never perform mental arithmetic or approximate values.
+  Format your final output conforming strictly to the CalculationResult schema.
+
+governance:
+  max_turns: 5
+  timeout_seconds: 60
+  stall_threshold: 2
+  max_cost_usd: 0.05
+
+testbed: "testbed.yaml"

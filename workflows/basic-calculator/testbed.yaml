@@ -1,0 +1,13 @@
+- id: "calc-smoke-01"
+  description: "Compound interest calculation on ₹10,000 at 5% for 3 years"
+  input:
+    query: "Calculate compound interest on ₹10,000 at 5% for 3 years"
+  expected_output:
+    result: 11576.25
+
+- id: "calc-smoke-02"
+  description: "Arithmetic expression evaluation"
+  input:
+    query: "Calculate (450 * 12) + (1800 / 4)"
+  expected_output:
+    result: 5850.0

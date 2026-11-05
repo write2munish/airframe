@@ -1,4 +1,4 @@
-"""Authorized mathematical calculation tool."""
+"""Authorized mathematical calculation tools for single-tool calculator."""
 
 from typing import Any
 

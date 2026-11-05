@@ -16,7 +16,6 @@ class CompoundInterestMathSensor(Sensor):
 
     async def evaluate(self, candidate, context=None) -> SensorResult:
         try:
-            # Candidate may be a CompoundInterestContract object or dict
             if hasattr(candidate, "model_dump"):
                 data = candidate.model_dump()
             elif isinstance(candidate, dict):

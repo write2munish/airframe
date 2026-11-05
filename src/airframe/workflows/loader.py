@@ -93,9 +93,13 @@ class WorkflowPack:
                 f"You are an autonomous agent executing the '{self.manifest.id}' workflow."
             )
             # Check if system_prompt points to a file
-            candidate_file = self.root_dir / prompt
-            if candidate_file.is_file():
-                prompt = candidate_file.read_text(encoding="utf-8")
+            if "\n" not in prompt and len(prompt) < 255:
+                try:
+                    candidate_file = self.root_dir / prompt
+                    if candidate_file.is_file():
+                        prompt = candidate_file.read_text(encoding="utf-8")
+                except OSError:
+                    pass
 
             synthetic_bp = AgentBlueprint(
                 name=self.manifest.entrypoint_agent or "worker",

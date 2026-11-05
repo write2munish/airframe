@@ -20,31 +20,23 @@ A raw LLM often:
 
 ---
 
-## 7 Steps to Build a Workflow Using Airframe
+## Streamlined Single-Agent Workflow Structure
 
-The calculator workflow follows the standard **Workflow Pack** pattern under `workflows/calculator/`:
+Under modern Airframe guidelines, single-agent packs avoid 6 nested subdirectories. All components are colocated cleanly:
 
 ```
 workflows/calculator/
-├── README.md                    # This step-by-step guide
-├── workflow.yaml                # 1. Master manifest & governance
-├── blueprints/
-│   └── calculator_agent.yaml    # 2. Agent blueprint & tool whitelists
-├── guides/
-│   └── task_spec.md             # 3. Task instructions & feedforward rules
-├── guards/
-│   └── contracts.py             # 4. Pydantic executable output schema
-├── sensors/
-│   └── deterministic.py         # 5. Tier 1 math verification sensor
-├── tools/
-│   └── calculator.py            # 6. The authorized computational tool
-└── testbed/
-    └── smoke.yaml               # 7. Golden test cases for regression testing
+├── README.md         # This step-by-step guide
+├── workflow.yaml     # 1. Master manifest (inline prompt, tools, governance)
+├── tools.py          # 2. Pure Python computational tools
+├── contracts.py      # 3. Pydantic executable output schema
+├── sensors.py        # 4. Tier 1 math verification sensor
+└── testbed.yaml      # 5. Golden test cases for regression testing
 ```
 
 ---
 
-### Step 1: Write the Tool Function (`tools/calculator.py`)
+### Step 1: Write the Tool Function (`tools.py`)
 Define pure, deterministic Python functions. Airframe agents never execute unvetted code; they invoke authorized tools:
 
 ```python

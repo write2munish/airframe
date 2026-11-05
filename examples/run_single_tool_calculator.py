@@ -19,9 +19,9 @@ from airframe.adapters import get_adapter
 from airframe.guards import ExecutableGuard, PayloadBounds
 from airframe.isolation import ContextPartitioner
 from airframe.sensors import SensorPipeline, ToolCallValidatorSensor
-from guards.contracts import CompoundInterestContract
-from sensors.deterministic import CompoundInterestMathSensor
-from tools.calculator import calculate_compound_interest
+from contracts import CompoundInterestContract
+from sensors import CompoundInterestMathSensor
+from tools import calculate_compound_interest
 
 console = Console()
 

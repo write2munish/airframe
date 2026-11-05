@@ -23,7 +23,6 @@ class ToolSequenceSensor(Sensor):
 
     async def evaluate(self, candidate: Any, context: dict[str, Any] | None = None) -> SensorResult:
         context = context or {}
-        # Candidate can be a list of executed tool names or extracted from context
         observed_sequence = candidate if isinstance(candidate, list) else context.get("tool_sequence", [])
 
         if observed_sequence == self.expected_sequence:
@@ -68,7 +67,6 @@ class CoordinateAccuracySensor(Sensor):
         return 1
 
     async def evaluate(self, candidate: Any, context: dict[str, Any] | None = None) -> SensorResult:
-        # Candidate should have latitude, longitude, target_hour
         data = candidate.model_dump() if hasattr(candidate, "model_dump") else (candidate if isinstance(candidate, dict) else {})
 
         lat = float(data.get("latitude", 0.0))
@@ -119,11 +117,9 @@ class PayloadPruningSensor(Sensor):
         return 1
 
     async def evaluate(self, candidate: Any, context: dict[str, Any] | None = None) -> SensorResult:
-        # Candidate is the tool payload dict or string
         context = context or {}
         estimated_tokens = context.get("tool_tokens") or (len(str(candidate)) // 4)
 
-        # Check for unpruned array indicators
         if isinstance(candidate, dict):
             if "hourly" in candidate or (isinstance(candidate.get("time"), list) and len(candidate.get("time")) > 24):
                 return SensorResult(

@@ -20,14 +20,14 @@ if str(wf_path) not in sys.path:
 from airframe.cli import app
 from airframe.sensors import SensorPipeline
 from airframe.workflows.loader import load_workflow
-from guards.contracts import WeatherForecastReport
-from sensors.deterministic import (
+from contracts import WeatherForecastReport
+from sensors import (
     CoordinateAccuracySensor,
     PayloadPruningSensor,
     ToolSequenceSensor,
     ZeroHallucinationWeatherSensor,
 )
-from tools.weather_tools import (
+from tools import (
     geocode_location,
     get_hourly_forecast,
 )
@@ -40,7 +40,6 @@ def test_weather_workflow_pack_loading():
     pack = load_workflow("workflows/weather-forecaster")
     assert pack.id == "weather-forecaster"
     assert pack.manifest.topology == "single-agent"
-    assert len(pack.manifest.agents) == 1
 
     bps = pack.load_blueprints()
     assert len(bps) == 1

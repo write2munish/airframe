@@ -1,13 +1,27 @@
-id: weather-forecaster
+id: "weather-forecaster"
 version: "1.0.0"
-description: "Deterministic Weather Forecaster with decoupled tools, payload pruning, and zero hallucination"
-topology: single-agent
-workspace_mode: inherit
-entrypoint_agent: meteorology-agent
-agents:
-  - blueprints/weather_agent.yaml
-testbed: testbed/smoke.yaml
+description: "Deterministic Weather Forecaster with decoupled tools, payload pruning, and zero-hallucination sensors."
+topology: "single-agent"
+workspace_mode: "inherit"
+entrypoint_agent: "meteorology-agent"
+engine_binding: "gemini-2.0-flash"
+tools:
+  - "geocode_location"
+  - "get_hourly_forecast"
+
+system_prompt: |
+  You are a geospatial meteorology specialist.
+  Answer weather queries accurately without hallucinating meteorological conditions.
+  Always follow two-step resolution:
+  1. Call geocode_location to resolve geographic latitude and longitude for the requested city.
+  2. Call get_hourly_forecast with the geocoded coordinates, ISO date, and 24h target hour.
+  Base your forecast strictly on the returned tool payload.
+  Format your final output conforming strictly to the WeatherForecastReport schema.
+
 governance:
   max_turns: 6
   timeout_seconds: 60
+  stall_threshold: 2
   max_cost_usd: 0.10
+
+testbed: "testbed.yaml"

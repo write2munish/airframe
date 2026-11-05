@@ -339,9 +339,13 @@ def run_cmd(
 
         # 6. Execute invoke_contract with system prompt inside isolated workspace
         sys_prompt = blueprint.system_prompt
-        potential_spec = pack.root_dir / sys_prompt
-        if potential_spec.is_file():
-            sys_prompt = potential_spec.read_text(encoding="utf-8")
+        if "\n" not in sys_prompt and len(sys_prompt) < 255:
+            try:
+                potential_spec = pack.root_dir / sys_prompt
+                if potential_spec.is_file():
+                    sys_prompt = potential_spec.read_text(encoding="utf-8")
+            except OSError:
+                pass
 
         with workspace as work_dir:
             validated_obj, response = asyncio.run(

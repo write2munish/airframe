@@ -1,16 +1,23 @@
 id: "single-tool-calculator"
 version: "1.0.0"
-description: "Single-tool calculator workflow: delegates complex financial formulas to verified mathematical tools."
+description: "Single-tool financial calculator workflow delegating calculations to verified tools."
 topology: "single-agent"
 workspace_mode: "inherit"
+entrypoint_agent: "financial-calculator"
+engine_binding: "gpt-4o-mini"
+tools:
+  - "calculate_compound_interest"
+
+system_prompt: |
+  You are a financial calculation specialist.
+  Calculate compound interest using only the authorized calculate_compound_interest tool.
+  Never approximate with mental arithmetic.
+  Format your final output strictly according to the CompoundInterestContract schema.
 
 governance:
   max_turns: 5
   timeout_seconds: 60
   stall_threshold: 2
+  max_cost_usd: 0.10
 
-entrypoint_agent: "financial-calculator"
-agents:
-  - "blueprints/calculator_agent.yaml"
-
-testbed: "testbed/smoke.yaml"
+testbed: "testbed.yaml"

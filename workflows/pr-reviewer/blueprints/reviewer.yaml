@@ -1,0 +1,13 @@
+name: "code-reviewer"
+role: "Staff Security & Quality Auditor"
+description: "Inspects code diffs for security vulnerabilities, syntax errors, and style regressions."
+system_prompt: "guides/task_spec.md"
+engine_binding: "gemini-2.0-flash"
+allowed_tools:
+  - "read_file"
+  - "run_linter"
+workspace_mode: "inherit"
+budget:
+  max_tokens: 60000
+  max_turns: 8
+  timeout_seconds: 180

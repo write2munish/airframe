@@ -5,7 +5,7 @@
 $$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/tests-36%20passed-brightgreen.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-40%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -106,7 +106,7 @@ if __name__ == "__main__":
 | **Phase 3** | **Dual-Layer Isolation** | `AgentBlueprint` manifests, `WorktreeManager` (Git worktrees), Context window partitioner | ✅ **Completed** |
 | **Phase 4** | **Multi-Agent & IPC** | Async typed mailbox, Supervisor-Worker coordination, Evaluator-Optimizer loop, cancellation | ✅ **Completed** |
 | **Phase 5** | **Long-Horizon Shifts** | State externalizer (`plan.md`), shift turnover engine, budget caps, loop/stall detectors | ✅ **Completed** |
-| **Phase 6** | **Workflows & Diff Engine**| `workflows/` pack loader, differential regression comparator, `workflows/pr-reviewer` pack | ⏳ *In Progress* |
+| **Phase 6** | **Workflows & Diff Engine**| `workflows/` pack loader, differential regression comparator, `workflows/pr-reviewer` pack, CLI | ✅ **Completed** |
 
 ---
 

@@ -1,0 +1,17 @@
+- id: "sqli-vulnerability"
+  description: "Detects raw string formatting in SQL query"
+  input:
+    file: "auth/login.py"
+    diff: "cursor.execute(f'SELECT * FROM users WHERE user = {username}')"
+  expected:
+    severity: "BLOCKER"
+    keyword: "SQL"
+
+- id: "clean-refactor"
+  description: "Clean docstring addition with zero defects"
+  input:
+    file: "utils/math.py"
+    diff: "def add(a, b):\n    '''Add two numbers.'''\n    return a + b"
+  expected:
+    passed: true
+    min_issues: 0

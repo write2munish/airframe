@@ -1,0 +1,17 @@
+id: "pr-reviewer"
+version: "1.0.0"
+description: "Autonomous code review agent checking pull requests for bugs, security risks, and style."
+topology: "single-agent"
+workspace_mode: "inherit"
+
+governance:
+  max_turns: 10
+  timeout_seconds: 300
+  max_budget_usd: 1.00
+  stall_threshold: 3
+
+entrypoint_agent: "code-reviewer"
+agents:
+  - "blueprints/reviewer.yaml"
+
+testbed: "testbed/smoke.yaml"

@@ -166,48 +166,57 @@ Ensure that changing foundation models in the future never introduces regression
 
 ---
 
-## Running the Workflow
+## Running & Testing the Workflow
 
-### Method 1: Run the Complete Driver Script
+### Method 1: Execute via Airframe CLI
 ```bash
-PYTHONPATH=src python3 examples/run_single_tool_calculator.py
+airframe run workflows/calculator -i "Calculate the compound interest on ₹10,000 at 5% for 3 years" --mock
 ```
 
 **Output:**
 ```
-╭───────────────────── ✈️ Airframe Single-Tool Calculator ──────────────────────╮
-│ User Request: Calculate the compound interest on ₹10,000 at 5% for 3 years   │
+╭──────────────────────── ✈️  Airframe Execution Engine ────────────────────────╮
+│ Executing Workflow: single-tool-calculator                                   │
+│ Engine: gpt-4o-mini  Topology: single-agent                                  │
+│ Input: Calculate the compound interest on ₹10,000 at 5% for 3 years           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-1. Context Partitioner initialized (private transcript: transcript.jsonl)
-2. Agent decides to invoke computational tool...
-   ✓ Tier 2 Sensor passed: Tool call 'calculate_compound_interest' successfully validated.
-   Tool Output: {'principal': 10000.0, 'total_amount': 11576.25, 'total_interest': 1576.25}
-3. Executing Executable Guard on output schema...
-   ✓ Executable Guard passed: Contract 'CompoundInterestContract' validated.
-4. Running Multi-Tier Sensor Verification Pipeline...
-   ✓ Tier 1 compound_interest_math_validator: Mathematical calculation verified independently: Amount=11576.25, Interest=1576.25
 
-              Financial Breakdown              
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
-┃ Parameter                 ┃ Value           ┃
-┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
-│ Principal (P)             │ ₹10,000.00      │
-│ Annual Interest Rate (r)  │ 5.0%            │
-│ Time Duration (t)         │ 3 Years         │
-│ Compounding Frequency (n) │ Annually (1/yr) │
-│ Compound Interest Earned  │ ₹1,576.25       │
-│ Total Accumulated Amount  │ ₹11,576.25      │
-└───────────────────────────┴─────────────────┘
+✓ Execution Completed Successfully
+╭──────────────── Validated Contract: CompoundInterestContract ────────────────╮
+│ {                                                                            │
+│   "currency": "₹",                                                           │
+│   "principal": 10000.0,                                                      │
+│   "rate_percent": 5.0,                                                       │
+│   "time_years": 3.0,                                                         │
+│   "compounding_frequency": 1,                                                │
+│   "total_amount": 11576.25,                                                  │
+│   "total_interest": 11576.25,                                                │
+│   "explanation": "Verified explanation"                                      │
+│ }                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Execution Telemetry & Governance 
+┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
+┃ Metric          ┃ Value       ┃
+┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
+│ Engine Provider │ mock        │
+│ Model           │ mock-engine │
+│ Input Tokens    │ 120         │
+│ Output Tokens   │ 65          │
+│ Total Tokens    │ 185         │
+│ Latency         │ 18.5ms      │
+│ Estimated Cost  │ $0.00030    │
+│ Workspace Mode  │ inherit     │
+└─────────────────┴─────────────┘
 ```
 
-### Method 2: Test the Workflow with the Airframe CLI
+### Method 2: Test the Workflow Testbed
 ```bash
-python3 -m airframe.cli test workflows/calculator
+airframe test workflows/calculator
 ```
 
 ### Method 3: Benchmark Model Swaps (Zero Regressions)
 ```bash
-python3 -m airframe.cli compare workflows/calculator \
+airframe compare workflows/calculator \
   --baseline gemini-2.0-flash \
   --candidate claude-3-5-sonnet
 ```

@@ -196,3 +196,4 @@ airframe/
 * **[INSTALLATION.md](INSTALLATION.md)**: Full setup instructions and model provider credentials guide.
 * **[REQUIREMENTS.md](REQUIREMENTS.md)**: Full functional requirements (FR-1 through FR-15) and non-functional requirements (NFR-1 through NFR-5).
 * **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)**: 6-phase engineering roadmap, milestone deliverables, and critical path.
+* **[SELF_IMPROVING_AGENTS.md](SELF_IMPROVING_AGENTS.md)**: Architectural guide and code patterns for building safe, verified self-improving agents.

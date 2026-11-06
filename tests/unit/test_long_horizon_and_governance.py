@@ -154,3 +154,71 @@ def test_human_approval_gate():
     # Rejected case
     with pytest.raises(ApprovalRejectedError, match="rejected by human operator"):
         gate.request_approval("drop table users", approval_callback=lambda desc: False)
+
+
+def test_disk_state_crash_safety_and_backup_recovery(tmp_path: Path):
+    """Test DiskStateManager survives corruptions and automatically recovers from .bak."""
+    from airframe.state import CorruptedStateError, atomic_write_text
+
+    state_dir = tmp_path / "crash_test_state"
+    manager = DiskStateManager(workspace_dir=state_dir)
+
+    tasks = [
+        TaskItem(id="task-1", description="Valid task 1"),
+        TaskItem(id="task-2", description="Valid task 2"),
+    ]
+    manager.init_state(plan_markdown="# Crash Test Plan", tasks=tasks)
+
+    # Verify initial files and backup
+    assert manager.queue_file.exists()
+    assert manager.queue_bak_file.exists()
+    assert len(manager.read_task_queue().tasks) == 2
+
+    # Simulate catastrophic crash mid-write: file truncated to 0 bytes or corrupted
+    manager.queue_file.write_text("{ \"tasks\": [ INVALID JSON TRUNCATED ...", encoding="utf-8")
+
+    # read_task_queue should detect corruption, recover from .bak, and self-heal
+    recovered_queue = manager.read_task_queue()
+    assert len(recovered_queue.tasks) == 2
+    assert recovered_queue.tasks[0].id == "task-1"
+    # Ensure queue_file was self-healed on disk
+    assert "INVALID JSON" not in manager.queue_file.read_text(encoding="utf-8")
+
+    # Simulate 0-byte file
+    manager.queue_file.write_text("", encoding="utf-8")
+    recovered_queue_2 = manager.read_task_queue()
+    assert len(recovered_queue_2.tasks) == 2
+
+    # Simulate unrecoverable corruption (both main and .bak corrupted)
+    manager.queue_file.write_text("CORRUPTED", encoding="utf-8")
+    manager.queue_bak_file.write_text("CORRUPTED_TOO", encoding="utf-8")
+
+    with pytest.raises(CorruptedStateError, match="corrupted and no valid backup"):
+        manager.read_task_queue()
+
+
+def test_concurrent_state_locking(tmp_path: Path):
+    """Test advisory file locking protects task queue updates across concurrent threads."""
+    import concurrent.futures
+
+    state_dir = tmp_path / "concurrent_state"
+    manager = DiskStateManager(workspace_dir=state_dir)
+
+    # Initialize 10 tasks
+    tasks = [TaskItem(id=f"t{i}", description=f"Task {i}") for i in range(10)]
+    manager.init_state(plan_markdown="# Concurrent Plan", tasks=tasks)
+
+    def worker_update(task_id: str) -> None:
+        local_mgr = DiskStateManager(workspace_dir=state_dir)
+        local_mgr.update_task_status(task_id, status="DONE", result_summary=f"Finished {task_id}")
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [pool.submit(worker_update, f"t{i}") for i in range(10)]
+        for fut in futures:
+            fut.result()
+
+    final_queue = manager.read_task_queue()
+    assert len(final_queue.tasks) == 10
+    assert all(t.status == "DONE" for t in final_queue.tasks)
+    assert all(t.result_summary is not None for t in final_queue.tasks)
+

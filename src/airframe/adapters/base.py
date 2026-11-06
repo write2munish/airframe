@@ -136,10 +136,11 @@ class ModelAdapter(ABC):
                     f"```json\n{json_schema_spec}\n```"
                 )
 
+            invoke_kwargs = {"target_schema": schema, **kwargs}
             last_response = await self.invoke(
                 prompt=call_prompt,
                 system_prompt=system_prompt,
-                **kwargs,
+                **invoke_kwargs,
             )
             return last_response.content
 

@@ -7,6 +7,7 @@ to physical filesystem isolation contexts.
 from __future__ import annotations
 
 import asyncio
+import atexit
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -76,7 +77,7 @@ class SharedWorkspace(WorkspaceStrategy):
 
 
 class WorktreeWorkspace(WorkspaceStrategy):
-    """'branch' mode: creates an isolated Git worktree on a dedicated branch and prunes it on exit."""
+    """'branch' mode: creates an isolated Git worktree on a dedicated branch with crash compensation."""
 
     def __init__(
         self,
@@ -91,16 +92,44 @@ class WorktreeWorkspace(WorkspaceStrategy):
         self.base_ref = base_ref
         self.delete_on_exit = delete_on_exit
         self.manager = WorktreeManager()
+        self._atexit_registered = False
+
+    def _atexit_cleanup(self) -> None:
+        """Emergency sync compensation if python terminates before __exit__ completes."""
+        if self.path and self.delete_on_exit:
+            try:
+                loop = asyncio.new_event_loop()
+                loop.run_until_complete(
+                    self.manager.remove_worktree(
+                        repo_path=self.repo_path,
+                        agent_id=self.agent_id,
+                        delete_branch=True,
+                    )
+                )
+                loop.close()
+            except Exception:
+                pass
 
     async def enter(self) -> Path:
         self.path = await self.manager.create_worktree(
             repo_path=self.repo_path,
             agent_id=self.agent_id,
             base_ref=self.base_ref,
+            reclaim_stale=True,
         )
+        if not self._atexit_registered:
+            atexit.register(self._atexit_cleanup)
+            self._atexit_registered = True
         return self.path
 
     async def exit(self, exc_type: Any = None, exc_val: Any = None, exc_tb: Any = None) -> None:
+        if self._atexit_registered:
+            try:
+                atexit.unregister(self._atexit_cleanup)
+            except Exception:
+                pass
+            self._atexit_registered = False
+
         if self.path and self.delete_on_exit:
             await self.manager.remove_worktree(
                 repo_path=self.repo_path,

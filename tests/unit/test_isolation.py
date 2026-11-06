@@ -126,6 +126,90 @@ def test_get_workspace_dispatcher(tmp_path: Path):
     assert created_path is not None
     assert not created_path.exists()  # Cleaned up
 
-    # 3. Invalid mode
+    # 3. Branch mode (Worktree)
+    repo_dir = tmp_path / "dispatch_repo"
+    repo_dir.mkdir()
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Tester"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "tester@test.com"], cwd=repo_dir, check=True)
+    (repo_dir / "init.txt").write_text("hello", encoding="utf-8")
+    subprocess.run(["git", "add", "init.txt"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "init"], cwd=repo_dir, check=True, capture_output=True)
+
+    ws_branch = get_workspace(mode="branch", agent_id="agent-branch-test", repo_path=repo_dir)
+    assert isinstance(ws_branch, WorktreeWorkspace)
+    with ws_branch as wt_path:
+        assert wt_path.exists()
+        assert (wt_path / "init.txt").read_text(encoding="utf-8") == "hello"
+    # Guaranteed cleaned up on exit
+    assert not wt_path.exists()
+
+    # 4. Invalid mode
     with pytest.raises(ValueError, match="Unsupported workspace_mode"):
         get_workspace(mode="unknown_mode")
+
+
+def test_worktree_stale_orphan_reaper_and_compensation(tmp_path: Path):
+    """Test WorktreeManager detects and compensates orphaned worktrees from crashed processes."""
+    repo_dir = tmp_path / "reaper_repo"
+    repo_dir.mkdir()
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+
+    (repo_dir / "README.md").write_text("# Main\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Init"], cwd=repo_dir, check=True, capture_output=True)
+
+    manager = WorktreeManager(base_worktree_dir=".airframe/worktrees")
+
+    # 1. Simulate crashed process: create worktree with a dead PID (e.g. PID 99999999)
+    wt_path = asyncio.run(manager.create_worktree(repo_dir, agent_id="crashed-agent"))
+    assert wt_path.exists()
+
+    # Manually tamper registry to point to a dead PID to simulate crash
+    reg = manager._read_registry(repo_dir)
+    assert "crashed-agent" in reg
+    reg["crashed-agent"]["pid"] = 99999999
+    manager._write_registry(repo_dir, reg)
+
+    # 2. Reap stale worktrees
+    reaped = asyncio.run(manager.reap_stale_worktrees(repo_dir))
+    assert "crashed-agent" in reaped
+    assert not wt_path.exists()
+
+    # Branch must be pruned
+    branches = subprocess.run(["git", "branch"], cwd=repo_dir, check=True, capture_output=True, text=True).stdout
+    assert "airframe/crashed-agent" not in branches
+
+
+def test_worktree_idempotent_reclaim_on_crash(tmp_path: Path):
+    """Test create_worktree automatically reclaims stale worktree/branch without fatal collision."""
+    repo_dir = tmp_path / "reclaim_repo"
+    repo_dir.mkdir()
+
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+
+    (repo_dir / "README.md").write_text("# Main\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Init"], cwd=repo_dir, check=True, capture_output=True)
+
+    manager = WorktreeManager(base_worktree_dir=".airframe/worktrees")
+
+    # Agent creates worktree
+    wt_path1 = asyncio.run(manager.create_worktree(repo_dir, agent_id="worker-x"))
+    assert wt_path1.exists()
+
+    # Simulate abrupt abort: worker crashed without calling remove_worktree
+    # Next run attempts create_worktree for the same worker-x
+    wt_path2 = asyncio.run(manager.create_worktree(repo_dir, agent_id="worker-x", reclaim_stale=True))
+    assert wt_path2.exists()
+    assert wt_path2 == wt_path1
+
+    # Cleanup
+    asyncio.run(manager.remove_worktree(repo_dir, agent_id="worker-x"))
+    assert not wt_path2.exists()
+

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.util
+import inspect
 import shutil
 from pathlib import Path
 from typing import Any, Literal
@@ -11,6 +13,8 @@ from pydantic import BaseModel, Field
 
 from airframe.blueprints.schema import AgentBlueprint
 from airframe.governance.circuit_breakers import Budget
+from airframe.sensors.base import Sensor
+from airframe.tools.registry import ToolRegistry
 
 # Alias for backward compatibility
 GovernanceSpec = Budget
@@ -114,6 +118,75 @@ class WorkflowPack:
             blueprints.append(synthetic_bp)
 
         return blueprints
+
+    def load_tools(self) -> ToolRegistry:
+        """Discover and load workflow-local tool functions from tools.py or tools/*.py."""
+        registry = ToolRegistry()
+        root_tools = self.root_dir / "tools.py"
+        if root_tools.is_file():
+            registry.load_from_file(root_tools, default_phase="execution")
+
+        tools_dir = self.root_dir / "tools"
+        if tools_dir.is_dir():
+            for py_file in sorted(tools_dir.glob("*.py")):
+                if py_file.name.startswith("_"):
+                    continue
+                registry.load_from_file(py_file, default_phase="execution")
+
+        return registry
+
+    def load_sensors(self, case_input: dict[str, Any] | None = None) -> list[Sensor]:
+        """Discover and instantiate deterministic/semantic Sensor classes from sensors.py or sensors/*.py."""
+        candidate_files: list[Path] = []
+        root_sensors = self.root_dir / "sensors.py"
+        if root_sensors.is_file():
+            candidate_files.append(root_sensors)
+
+        sensors_dir = self.root_dir / "sensors"
+        if sensors_dir.is_dir():
+            for py_file in sorted(sensors_dir.glob("*.py")):
+                if py_file.name.startswith("_"):
+                    continue
+                candidate_files.append(py_file)
+
+        inputs = dict(case_input or {})
+        loaded_sensors: list[Sensor] = []
+
+        for py_path in candidate_files:
+            mod_name = f"airframe_sensors_{self.id.replace('-', '_')}_{py_path.stem}_{abs(hash(str(py_path))) % 100000}"
+            spec = importlib.util.spec_from_file_location(mod_name, py_path)
+            if spec is None or spec.loader is None:
+                continue
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+
+            for _, obj in inspect.getmembers(module, inspect.isclass):
+                if not issubclass(obj, Sensor) or obj is Sensor:
+                    continue
+                if getattr(obj, "__module__", None) != module.__name__:
+                    continue
+                if inspect.isabstract(obj):
+                    continue
+
+                sig = inspect.signature(obj.__init__)
+                init_kwargs: dict[str, Any] = {}
+                can_instantiate = True
+                for param_name, param in sig.parameters.items():
+                    if param_name == "self" or param.kind in (
+                        inspect.Parameter.VAR_POSITIONAL,
+                        inspect.Parameter.VAR_KEYWORD,
+                    ):
+                        continue
+                    if param_name in inputs:
+                        init_kwargs[param_name] = inputs[param_name]
+                    elif param.default is inspect.Parameter.empty:
+                        can_instantiate = False
+                        break
+
+                if can_instantiate:
+                    loaded_sensors.append(obj(**init_kwargs))
+
+        return loaded_sensors
 
 
 def load_workflow(workflow_target: str | Path) -> WorkflowPack:

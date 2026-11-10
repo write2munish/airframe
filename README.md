@@ -5,7 +5,7 @@
 $$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/tests-55%20passed-brightgreen.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-76%20offline%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -48,10 +48,14 @@ airframe --version
 airframe info
 ```
 
-### 3. Run Automated Tests (20/20 Passing)
+### 3. Run Automated Tests (76/76 Offline Passing)
 
 ```bash
-PYTHONPATH=src pytest tests/ -v
+# Run deterministic offline unit and integration suite (zero external API keys required):
+PYTHONPATH=src pytest tests/unit tests/integration -v
+
+# Run opt-in live vendor adapter smoke tests (requires AIRFRAME_LIVE_TESTS=1 + keys / Ollama):
+AIRFRAME_LIVE_TESTS=1 PYTHONPATH=src pytest tests/live -v
 ```
 
 ---
@@ -102,14 +106,14 @@ if __name__ == "__main__":
 
 ## 🗺️ Roadmap & Implementation Status
 
-| Milestone | Subsystem | Key Capabilities | Status |
-| :---: | :--- | :--- | :---: |
-| **Phase 1** | **Core Engine & Adapters** | Universal `ModelAdapter`, telemetry, Gemini/Claude/OpenAI/Ollama adapters, Jinja2 prompt profiler, CLI | ✅ **Completed** |
-| **Phase 2** | **Guards & Sensor Pipeline** | `ExecutableGuard` (Pydantic v2), byte/line ceilings, Tier 1-3 sensors, fast-fail short-circuiting | ✅ **Completed** |
-| **Phase 3** | **Dual-Layer Isolation** | `AgentBlueprint` manifests, `WorktreeManager` (Git worktrees), Context window partitioner | ✅ **Completed** |
-| **Phase 4** | **Multi-Agent & IPC** | Async typed mailbox, Supervisor-Worker coordination, Evaluator-Optimizer loop, cancellation | ✅ **Completed** |
-| **Phase 5** | **Long-Horizon Shifts** | State externalizer (`plan.md`), shift turnover engine, budget caps, loop/stall detectors | ✅ **Completed** |
-| **Phase 6** | **Workflows & Diff Engine**| `workflows/` pack loader, differential regression comparator, `workflows/pr-reviewer` pack, CLI | ✅ **Completed** |
+| Milestone | Subsystem | Key Capabilities | Verification & Status |
+| :---: | :--- | :--- | :--- |
+| **Phase 1** | **Core Engine & Adapters** | Universal `ModelAdapter`, telemetry, Gemini/Claude/OpenAI/Ollama adapters, Jinja2 prompt profiler, CLI | ✅ **Completed** ([`test_adapters.py`](tests/unit/test_adapters.py), opt-in [`test_live_adapters.py`](tests/live/test_live_adapters.py)) |
+| **Phase 2** | **Guards & Sensor Pipeline** | `ExecutableGuard` (Pydantic v2), byte/line ceilings, Tier 1–3 sensors, fast-fail short-circuiting, `ToolRegistry` / phase scoping / `ToolRunner` | ✅ **Completed** ([`test_guards_and_sensors.py`](tests/unit/test_guards_and_sensors.py), [`test_tools.py`](tests/unit/test_tools.py)) |
+| **Phase 3** | **Dual-Layer Isolation** | `AgentBlueprint` manifests, locked `WorktreeManager` with `SIGKILL`/`SIGINT`/`SIGTERM` compensation & `WorktreeConflictError`, `ContextPartitioner` (`fsync` + `.corrupt_tail` recovery) | ✅ **Completed** ([`test_blueprints.py`](tests/unit/test_blueprints.py), [`test_isolation.py`](tests/unit/test_isolation.py)) · Container mode (`workspace_mode="container"`) **Deferred (per [ADR 0001](docs/adr/0001-workflow-vs-container-isolation.md))** |
+| **Phase 4** | **Multi-Agent, IPC & Runner** | Async typed `EventBus`, `SupervisorAgent` with `RecursionLimiter`, `EvaluatorOptimizerLoop`, `WorkflowRunner` (`single-agent`, `orchestrator-workers`, `evaluator-optimizer`), `AirframeTracer` W3C JSONL trace trees | ✅ **Completed** ([`test_orchestration.py`](tests/unit/test_orchestration.py), [`test_telemetry_tracer.py`](tests/unit/test_telemetry_tracer.py), [`test_runtime_runner.py`](tests/integration/test_runtime_runner.py)) · `router` topology **Not Implemented** |
+| **Phase 5** | **Long-Horizon Shifts & Governance** | Crash-safe `DiskStateManager` (`atomic_write_text`, re-entrant `flock`, `.bak` recovery), `ShiftTurnoverEngine` with git checkpointing & history wipe, `BudgetTracker`, `StallDetector`, `HumanApprovalGate`, `max_turns` & `timeout_seconds` | ✅ **Completed** ([`test_long_horizon_and_governance.py`](tests/unit/test_long_horizon_and_governance.py), [`test_system_integration.py`](tests/integration/test_system_integration.py), [`test_runtime_runner.py`](tests/integration/test_runtime_runner.py)) |
+| **Phase 6** | **Workflow Packs & CLI Diff Engine**| `WorkflowPack` (`load_tools`, `load_sensors`, `entrypoint_agent`), `airframe run`/`test`/`compare`/`init`, semantic `expected` assertions & custom sensor gates, differential scorecard comparator | ✅ **Completed** ([`test_cli.py`](tests/unit/test_cli.py), [`test_workflows_and_diff.py`](tests/unit/test_workflows_and_diff.py), [`test_weather_forecaster.py`](tests/unit/test_weather_forecaster.py)) |
 
 ---
 
@@ -170,10 +174,13 @@ airframe init workflow customer-support
 ```
 airframe/
 ├── INSTALLATION.md                   # Installation & provider configuration guide
-├── IMPLEMENTATION_PLAN.md            # 6-phase engineering roadmap
+├── IMPLEMENTATION_PLAN.md            # 6-phase engineering roadmap & verification matrix
 ├── README.md                         # Project overview and quickstart
 ├── REQUIREMENTS.md                   # Complete architectural requirements (FR-1 to FR-15)
 ├── pyproject.toml                    # Package metadata and dependencies
+├── docs/
+│   ├── adr/                          # Architecture Decision Records (ADR 0001)
+│   └── specs/                        # Remediation & architecture specifications
 │
 ├── src/
 │   └── airframe/
@@ -181,21 +188,22 @@ airframe/
 │       ├── guards/                   # Executable guards, Pydantic schemas, repair loops
 │       ├── sensors/                  # Tier 1 deterministic, Tier 2 semantic, Tier 3 judges
 │       ├── blueprints/               # Agent manifests & schema validation (Phase 3)
-│       ├── isolation/                # Git worktree managers, transcript partitioners (Phase 3)
-│       ├── orchestration/            # Supervisor, topologies, shift turnover (Phase 4, 5)
-│       ├── ipc/                      # Async mailbox, event bus, reactive wakeups (Phase 4)
-│       ├── tools/                    # Tool registry, dynamic injector
-│       ├── governance/               # Budget trackers, loop detectors, HITL gates (Phase 5)
-│       ├── state/                    # State externalization (plan.md, task_queue.json) (Phase 5)
-│       ├── telemetry/                # OpenTelemetry traces, session replay
-│       └── cli.py                    # CLI (`airframe info`, `airframe run`, `airframe compare`)
+│       ├── isolation/                # Locked Git worktree manager, transcript partitioner (Phase 3)
+│       ├── orchestration/            # Supervisor, Evaluator-Optimizer, shift turnover (Phase 4, 5)
+│       ├── ipc/                      # Async mailbox, event bus, cancellation cascades (Phase 4)
+│       ├── tools/                    # Tool registry, phase scoper (max 5/phase), ToolRunner (FR-4)
+│       ├── governance/               # Budget trackers, stall/recursion detectors, HITL gates (Phase 5)
+│       ├── state/                    # Crash-safe state externalizer (`atomic_write_text`, `.bak`) (Phase 5)
+│       ├── runner/                   # Canonical `WorkflowRunner` & ReAct loop runtime (FR-10..FR-13)
+│       ├── telemetry/                # Hierarchical JSONL `AirframeTracer`, scorecards, diff reports (FR-14)
+│       ├── workflows/                # WorkflowPack manifest, tool & sensor loader (FR-15)
+│       └── cli.py                    # CLI (`airframe run`, `test`, `compare`, `init`)
 │
 ├── tests/
-│   └── unit/
-│       ├── test_adapters.py          # 8 adapter & contract tests (Passing)
-│       ├── test_guards_and_sensors.py# 10 guard & sensor tests (Passing)
-│       └── test_cli.py               # 2 CLI tests (Passing)
-└── workflows/                        # Self-contained use-case packs
+│   ├── unit/                         # Deterministic unit suites (`test_adapters.py`, `test_cli.py`, `test_isolation.py`, `test_tools.py`, `test_telemetry_tracer.py`, etc.)
+│   ├── integration/                  # End-to-end runtime, worktree crash recovery & governance suites (`test_system_integration.py`, `test_runtime_runner.py`)
+│   └── live/                         # Opt-in live vendor HTTP smoke tests (`AIRFRAME_LIVE_TESTS=1`)
+└── workflows/                        # Self-contained use-case packs (`pr-reviewer`, `basic-calculator`, `calculator`, `weather-forecaster`)
 ```
 
 ---

@@ -1,6 +1,6 @@
 # Gap Remediation & Hardening Specification (Biased & Compartmentalized)
 
-* **Status:** Proposed / Ready for Wave Execution
+* **Status:** Implemented & Verified (`76/76` offline tests passing; `4` opt-in live tests)
 * **Date:** 2026-11-10
 * **Baseline Commit:** `f5eadf1` (`55/55` tests passing)
 * **Companion Docs:** [`REQUIREMENTS.md`](../../REQUIREMENTS.md), [`ADR 0001`](../adr/0001-workflow-vs-container-isolation.md)
@@ -216,9 +216,9 @@ flowchart LR
 
 This remediation spec is complete only when all of the following hold simultaneously:
 
-- [ ] **C1:** `SIGKILL` subprocess orphan test, concurrent registry lock test, `WorktreeConflictError` live-peer test, and truncated `transcript.jsonl` tail test all pass.
-- [ ] **C2:** `src/airframe/tools/` loads `workflows/basic-calculator/tools.py` & `workflows/weather-forecaster/tools.py` without modifying them, enforces max 5 tools/phase, and blocks unsafe actions via `HumanApprovalGate`.
-- [ ] **C3:** Nested async tasks produce valid parent-linked W3C JSONL trace trees under `.airframe/traces/`.
-- [ ] **C4:** `WorkflowRunner` executes single-agent tool loops, `evaluator-optimizer`, `orchestrator-workers`, multi-shift turnover commits, and trips every circuit breaker (`BudgetTracker`, `StallDetector`, `RecursionLimiter`, `timeout_seconds`, `max_turns`).
-- [ ] **C5:** `airframe test` fails with `exit_code == 1` when `expected` outputs or custom `sensors.py` checks fail; `airframe run` respects `entrypoint_agent` and `topology`.
-- [ ] **C6:** Offline test suite passes cleanly and documentation reflects 1:1 runtime truth.
+- [x] **C1:** `SIGKILL` subprocess orphan test, concurrent registry lock test, `WorktreeConflictError` live-peer test, and truncated `transcript.jsonl` tail test all pass. (`tests/unit/test_isolation.py`)
+- [x] **C2:** `src/airframe/tools/` loads `workflows/basic-calculator/tools.py` & `workflows/weather-forecaster/tools.py` without modifying them, enforces max 5 tools/phase, and blocks unsafe actions via `HumanApprovalGate`. (`tests/unit/test_tools.py`)
+- [x] **C3:** Nested async tasks produce valid parent-linked W3C JSONL trace trees under `.airframe/traces/`. (`tests/unit/test_telemetry_tracer.py`)
+- [x] **C4:** `WorkflowRunner` executes single-agent tool loops, `evaluator-optimizer`, `orchestrator-workers`, multi-shift turnover commits, and trips every circuit breaker (`BudgetTracker`, `StallDetector`, `RecursionLimiter`, `timeout_seconds`, `max_turns`). (`tests/integration/test_runtime_runner.py`)
+- [x] **C5:** `airframe test` fails with `exit_code == 1` when `expected` outputs or custom `sensors.py` checks fail; `airframe run` respects `entrypoint_agent` and `topology`. (`tests/unit/test_cli.py`, `tests/unit/test_workflows_and_diff.py`)
+- [x] **C6:** Offline test suite passes cleanly and documentation reflects 1:1 runtime truth. (`README.md`, `REQUIREMENTS.md`, `IMPLEMENTATION_PLAN.md`, `tests/live/test_live_adapters.py`)

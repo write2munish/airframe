@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+import subprocess
 from typing import Any
 
 from airframe.state.disk import DiskStateManager
@@ -24,25 +26,78 @@ class ShiftTurnoverEngine:
         """Check if active context consumption breaches the turnover threshold."""
         return current_tokens_used >= self.turnover_token_ceiling
 
+    def _checkpoint_worktree(self, worktree_dir: str | Path, shift_id: int) -> str | None:
+        """Stage and commit any dirty working tree changes before wiping shift context."""
+        wt_path = Path(worktree_dir).resolve()
+        if not (wt_path / ".git").exists():
+            return None
+
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=wt_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if status.returncode != 0 or not status.stdout.strip():
+            return None
+
+        subprocess.run(
+            ["git", "add", "-A"],
+            cwd=wt_path,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        # Preserve configured repo author, supplying fallback only if unset
+        name_cfg = subprocess.run(
+            ["git", "config", "user.name"], cwd=wt_path, capture_output=True, text=True, check=False
+        )
+        email_cfg = subprocess.run(
+            ["git", "config", "user.email"], cwd=wt_path, capture_output=True, text=True, check=False
+        )
+
+        cmd = ["git"]
+        if not name_cfg.stdout.strip():
+            cmd.extend(["-c", "user.name=Airframe"])
+        if not email_cfg.stdout.strip():
+            cmd.extend(["-c", "user.email=airframe@local"])
+        commit_msg = f"airframe: shift {shift_id} checkpoint"
+        cmd.extend(["commit", "-m", commit_msg])
+
+        subprocess.run(cmd, cwd=wt_path, check=True, capture_output=True, text=True)
+        head_rev = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=wt_path, check=True, capture_output=True, text=True
+        )
+        return head_rev.stdout.strip()
+
     def execute_turnover(
         self,
         state_manager: DiskStateManager,
         shift_id: int,
         accomplishments_summary: str,
+        worktree_dir: str | Path | None = None,
     ) -> int:
-        """Finalize the active shift, record handoff memo, and advance to next shift index.
+        """Finalize the active shift, optionally checkpoint git worktree, record handoff memo, and advance shift.
 
         Args:
             state_manager: DiskStateManager managing state on filesystem.
             shift_id: The ending shift index.
             accomplishments_summary: Handoff memo summarizing changes.
+            worktree_dir: Optional git worktree directory to commit dirty changes into before turnover.
 
         Returns:
             The next shift index (shift_id + 1).
         """
+        checkpoint_sha: str | None = None
+        if worktree_dir is not None:
+            checkpoint_sha = self._checkpoint_worktree(worktree_dir=worktree_dir, shift_id=shift_id)
+
         next_shift_id = shift_id + 1
+        checkpoint_note = f" [git_checkpoint={checkpoint_sha[:12]}]" if checkpoint_sha else ""
         log_entry = (
-            f"=== SHIFT {shift_id} COMPLETED -> TRANSITIONING TO SHIFT {next_shift_id} ===\n"
+            f"=== SHIFT {shift_id} COMPLETED -> TRANSITIONING TO SHIFT {next_shift_id} ==={checkpoint_note}\n"
             f"Handoff Memo: {accomplishments_summary}"
         )
         state_manager.append_progress_log(log_entry, author=f"shift_{shift_id}")

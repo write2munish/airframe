@@ -29,6 +29,19 @@ flowchart LR
 
 ---
 
+## Current Implementation Verification Matrix
+
+| Component / Requirement | Implemented Modules | Verification Tests | Notes |
+| :--- | :--- | :--- | :--- |
+| **Phase 1: Adapters & Prompt Profiler** (`FR-1`) | `src/airframe/adapters/` | `tests/unit/test_adapters.py` | Live vendor smoke suite opt-in via `AIRFRAME_LIVE_TESTS=1` in `tests/live/test_live_adapters.py` |
+| **Phase 2: Guards, Sensors & Scoped Tools** (`FR-2`, `FR-3`, `FR-4`) | `src/airframe/guards/`, `src/airframe/sensors/`, `src/airframe/tools/` | `tests/unit/test_guards_and_sensors.py`, `tests/unit/test_tools.py` | `ruff`/`mypy` wrappers not bundled (use `ExitCodeSensor` or tools); Tier 2 uses `TokenOverlapSensor` Jaccard similarity |
+| **Phase 3: Dual-Layer Isolation & Blueprints** (`FR-8`, `FR-9`) | `src/airframe/blueprints/`, `src/airframe/isolation/` | `tests/unit/test_blueprints.py`, `tests/unit/test_isolation.py`, `tests/integration/test_system_integration.py` | `workspace_mode="container"` is **Deferred (per [ADR 0001](docs/adr/0001-workflow-vs-container-isolation.md))** |
+| **Phase 4: Multi-Agent IPC, Runtime & Tracing** (`FR-10`, `FR-12`, `FR-14`) | `src/airframe/ipc/`, `src/airframe/orchestration/`, `src/airframe/runner/`, `src/airframe/telemetry/tracer.py` | `tests/unit/test_orchestration.py`, `tests/unit/test_telemetry_tracer.py`, `tests/integration/test_runtime_runner.py` | `router` topology **Not Implemented**; W3C JSONL trace trees + optional OTel mirror |
+| **Phase 5: State Persistence, Shifts & Governance** (`FR-11`, `FR-13`) | `src/airframe/state/disk.py`, `src/airframe/orchestration/shift.py`, `src/airframe/governance/circuit_breakers.py` | `tests/unit/test_long_horizon_and_governance.py`, `tests/integration/test_system_integration.py`, `tests/integration/test_runtime_runner.py` | Re-entrant `flock` + `.bak` recovery; shift git commit checkpoints wired in `WorkflowRunner` |
+| **Phase 6: Workflow Packs & CLI Diff Engine** (`FR-5`, `FR-15`) | `src/airframe/workflows/loader.py`, `src/airframe/cli.py`, `src/airframe/telemetry/diff.py` | `tests/unit/test_cli.py`, `tests/unit/test_workflows_and_diff.py`, `tests/unit/test_weather_forecaster.py` | `airframe test`/`compare` enforce `expected` assertions & auto-discovered `sensors.py` |
+
+---
+
 ## 2. Phase-by-Phase Execution Breakdown
 
 ### Phase 1: Engine Foundation & Swappable Adapters
@@ -172,10 +185,16 @@ graph TD
 
 ---
 
-## 4. Immediate Next Step: Phase 1 Kickoff
+## 4. Verification Status Summary
 
-To start Phase 1, we will:
-1. Create `pyproject.toml` with base dependencies and dev tools.
-2. Build `src/airframe/adapters/base.py` (`ModelAdapter` base class).
-3. Implement `src/airframe/adapters/openai_compatible.py` (Ollama/OpenAI support) and `src/airframe/adapters/gemini.py`.
-4. Add initial unit tests in `tests/unit/test_adapters.py`.
+All Phases 1–6 and core runtime hardening compartments (`C1`–`C6`, see [`docs/specs/gap-remediation-spec.md`](docs/specs/gap-remediation-spec.md)) are implemented and verified offline via:
+
+```bash
+PYTHONPATH=src pytest tests/unit tests/integration -v
+```
+
+For real cloud/local endpoint smoke checks (`GeminiAdapter`, `AnthropicAdapter`, `OpenAICompatibleAdapter`):
+
+```bash
+AIRFRAME_LIVE_TESTS=1 PYTHONPATH=src pytest tests/live -v
+```

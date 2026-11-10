@@ -10,6 +10,8 @@ import asyncio
 import atexit
 from abc import ABC, abstractmethod
 from pathlib import Path
+import signal
+import threading
 from typing import Any
 
 from airframe.isolation.sandbox import EphemeralSandbox
@@ -93,6 +95,9 @@ class WorktreeWorkspace(WorkspaceStrategy):
         self.delete_on_exit = delete_on_exit
         self.manager = WorktreeManager()
         self._atexit_registered = False
+        self._signals_registered = False
+        self._prev_sigint: Any = None
+        self._prev_sigterm: Any = None
 
     def _atexit_cleanup(self) -> None:
         """Emergency sync compensation if python terminates before __exit__ completes."""
@@ -109,6 +114,43 @@ class WorktreeWorkspace(WorkspaceStrategy):
                 loop.close()
             except Exception:
                 pass
+            self.path = None
+
+    def _signal_cleanup(self, signum: int, frame: Any) -> None:
+        """Clean up active worktree on SIGINT/SIGTERM and forward to previous handler."""
+        self._atexit_cleanup()
+        prev = self._prev_sigint if signum == signal.SIGINT else self._prev_sigterm
+        self._unregister_signals()
+        if callable(prev):
+            prev(signum, frame)
+        elif signum == signal.SIGINT:
+            raise KeyboardInterrupt
+        else:
+            raise SystemExit(128 + signum)
+
+    def _register_signals(self) -> None:
+        if self._signals_registered or threading.current_thread() is not threading.main_thread():
+            return
+        try:
+            self._prev_sigint = signal.getsignal(signal.SIGINT)
+            self._prev_sigterm = signal.getsignal(signal.SIGTERM)
+            signal.signal(signal.SIGINT, self._signal_cleanup)
+            signal.signal(signal.SIGTERM, self._signal_cleanup)
+            self._signals_registered = True
+        except Exception:
+            pass
+
+    def _unregister_signals(self) -> None:
+        if not self._signals_registered or threading.current_thread() is not threading.main_thread():
+            return
+        try:
+            if self._prev_sigint is not None:
+                signal.signal(signal.SIGINT, self._prev_sigint)
+            if self._prev_sigterm is not None:
+                signal.signal(signal.SIGTERM, self._prev_sigterm)
+        except Exception:
+            pass
+        self._signals_registered = False
 
     async def enter(self) -> Path:
         self.path = await self.manager.create_worktree(
@@ -120,9 +162,11 @@ class WorktreeWorkspace(WorkspaceStrategy):
         if not self._atexit_registered:
             atexit.register(self._atexit_cleanup)
             self._atexit_registered = True
+        self._register_signals()
         return self.path
 
     async def exit(self, exc_type: Any = None, exc_val: Any = None, exc_tb: Any = None) -> None:
+        self._unregister_signals()
         if self._atexit_registered:
             try:
                 atexit.unregister(self._atexit_cleanup)
@@ -136,6 +180,7 @@ class WorktreeWorkspace(WorkspaceStrategy):
                 agent_id=self.agent_id,
                 delete_branch=True,
             )
+            self.path = None
 
 
 class SandboxWorkspace(WorkspaceStrategy):

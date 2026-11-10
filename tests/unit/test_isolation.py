@@ -213,3 +213,189 @@ def test_worktree_idempotent_reclaim_on_crash(tmp_path: Path):
     asyncio.run(manager.remove_worktree(repo_dir, agent_id="worker-x"))
     assert not wt_path2.exists()
 
+
+def _init_temp_git_repo(repo_dir: Path) -> None:
+    repo_dir.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-b", "main"], cwd=repo_dir, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_dir, check=True)
+    (repo_dir / "README.md").write_text("# Main\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=repo_dir, check=True)
+    subprocess.run(["git", "commit", "-m", "Init"], cwd=repo_dir, check=True, capture_output=True)
+
+
+def test_real_sigkill_subprocess_worktree_reap(tmp_path: Path):
+    """Spawn a real OS subprocess holding a worktree, SIGKILL it, and verify orphan reaping."""
+    import os
+    import signal
+    import sys
+    import time
+
+    repo_dir = tmp_path / "sigkill_repo"
+    _init_temp_git_repo(repo_dir)
+
+    src_root = str(Path(__file__).resolve().parent.parent.parent / "src")
+    env = {**os.environ, "PYTHONPATH": src_root}
+    ready_flag = tmp_path / "ready.flag"
+
+    child_script = (
+        "import asyncio, pathlib; "
+        "from airframe.isolation import WorktreeManager; "
+        f"m = WorktreeManager(); "
+        f"asyncio.run(m.create_worktree(r'{repo_dir}', 'sigkill-victim')); "
+        f"pathlib.Path(r'{ready_flag}').write_text('ok'); "
+        "import time; time.sleep(60)"
+    )
+    proc = subprocess.Popen([sys.executable, "-c", child_script], env=env)
+    try:
+        # Wait until child finishes creating worktree
+        deadline = time.time() + 10.0
+        while not ready_flag.exists() and time.time() < deadline:
+            time.sleep(0.05)
+        assert ready_flag.exists()
+
+        wt_path = repo_dir / ".airframe" / "worktrees" / "sigkill-victim"
+        assert wt_path.exists()
+
+        # Hard-kill child process mid-turn (bypasses Python finally/atexit/signals)
+        os.kill(proc.pid, signal.SIGKILL)
+        proc.wait(timeout=5)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+
+    # Reaper must detect dead child PID and wipe worktree + branch
+    manager = WorktreeManager()
+    reaped = asyncio.run(manager.reap_stale_worktrees(repo_dir))
+    assert "sigkill-victim" in reaped
+    assert not wt_path.exists()
+    branches = subprocess.run(["git", "branch"], cwd=repo_dir, check=True, capture_output=True, text=True).stdout
+    assert "airframe/sigkill-victim" not in branches
+
+
+def test_live_sibling_worktree_conflict_protection(tmp_path: Path):
+    """Verify WorktreeConflictError prevents clobbering an active live child process's worktree."""
+    import os
+    import sys
+    import time
+    from airframe.isolation import WorktreeConflictError
+
+    repo_dir = tmp_path / "conflict_repo"
+    _init_temp_git_repo(repo_dir)
+
+    src_root = str(Path(__file__).resolve().parent.parent.parent / "src")
+    env = {**os.environ, "PYTHONPATH": src_root}
+    ready_flag = tmp_path / "peer_ready.flag"
+
+    child_script = (
+        "import asyncio, pathlib, time; "
+        "from airframe.isolation import WorktreeManager; "
+        "m = WorktreeManager(); "
+        f"asyncio.run(m.create_worktree(r'{repo_dir}', 'active-peer')); "
+        f"pathlib.Path(r'{ready_flag}').write_text('ok'); "
+        "time.sleep(30)"
+    )
+    proc = subprocess.Popen([sys.executable, "-c", child_script], env=env)
+    try:
+        deadline = time.time() + 10.0
+        while not ready_flag.exists() and time.time() < deadline:
+            time.sleep(0.05)
+        assert ready_flag.exists()
+
+        manager = WorktreeManager()
+        with pytest.raises(WorktreeConflictError, match="actively held by live PID"):
+            asyncio.run(manager.create_worktree(repo_dir, agent_id="active-peer"))
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+        asyncio.run(WorktreeManager().reap_stale_worktrees(repo_dir, force=True))
+
+
+def test_concurrent_worktree_registry_stress(tmp_path: Path):
+    """Run 8 concurrent worktree creations and removals via asyncio.gather without registry loss."""
+    repo_dir = tmp_path / "stress_repo"
+    _init_temp_git_repo(repo_dir)
+
+    manager = WorktreeManager()
+    agent_ids = [f"parallel-worker-{i}" for i in range(8)]
+
+    async def run_stress():
+        paths = await asyncio.gather(
+            *(manager.create_worktree(repo_dir, agent_id=aid) for aid in agent_ids)
+        )
+        assert all(p.exists() for p in paths)
+        reg = manager._read_registry(repo_dir)
+        assert set(agent_ids).issubset(reg.keys())
+
+        await asyncio.gather(
+            *(manager.remove_worktree(repo_dir, agent_id=aid) for aid in agent_ids)
+        )
+        assert all(not p.exists() for p in paths)
+        assert manager._read_registry(repo_dir) == {}
+
+    asyncio.run(run_stress())
+
+
+def test_worktree_get_diff_single_commit_and_uncommitted(tmp_path: Path):
+    """Verify get_diff works on single-commit repos and captures uncommitted + untracked edits."""
+    repo_dir = tmp_path / "diff_repo"
+    _init_temp_git_repo(repo_dir)
+
+    manager = WorktreeManager()
+    wt_path = asyncio.run(manager.create_worktree(repo_dir, agent_id="diff-agent"))
+    try:
+        # 1. Modify tracked file without committing
+        (wt_path / "README.md").write_text("# Main\nModified line\n", encoding="utf-8")
+        # 2. Create untracked file without committing
+        (wt_path / "new_untracked.py").write_text("x = 1\n", encoding="utf-8")
+
+        diff_uncommitted = asyncio.run(manager.get_diff(wt_path))
+        assert "Modified line" in diff_uncommitted
+        assert "new_untracked.py" in diff_uncommitted
+
+        # 3. Commit and add a second commit
+        subprocess.run(["git", "add", "."], cwd=wt_path, check=True)
+        subprocess.run(["git", "commit", "-m", "Commit 1"], cwd=wt_path, check=True, capture_output=True)
+        (wt_path / "second.py").write_text("y = 2\n", encoding="utf-8")
+        subprocess.run(["git", "add", "second.py"], cwd=wt_path, check=True)
+        subprocess.run(["git", "commit", "-m", "Commit 2"], cwd=wt_path, check=True, capture_output=True)
+
+        diff_multi = asyncio.run(manager.get_diff(wt_path))
+        assert "Modified line" in diff_multi
+        assert "new_untracked.py" in diff_multi
+        assert "second.py" in diff_multi
+    finally:
+        asyncio.run(manager.remove_worktree(repo_dir, agent_id="diff-agent"))
+
+
+def test_context_partitioner_truncated_tail_recovery(tmp_path: Path):
+    """Verify read_transcript quarantines partial truncated tails while rejecting middle corruption."""
+    from airframe.isolation import CorruptedTranscriptError
+
+    storage = tmp_path / "tx"
+    p = ContextPartitioner(agent_id="crash-tx", storage_dir=storage)
+    p.log_turn(role="user", content="step 1", tokens=10)
+    p.log_turn(role="assistant", content="step 2", tokens=20)
+
+    # Simulate mid-write crash appending partial JSON tail
+    with p.transcript_file.open("a", encoding="utf-8") as f:
+        f.write('{"step_index": 3, "role": "tool", "con')
+
+    recovered = p.read_transcript(tolerate_corrupt_tail=True)
+    assert len(recovered) == 2
+    assert recovered[0].content == "step 1"
+    assert recovered[1].content == "step 2"
+    assert p.corrupt_tail_file.exists()
+
+    # Subsequent appends should remain cleanly parseable
+    p.log_turn(role="assistant", content="step 3 clean", tokens=15)
+    assert len(p.read_transcript()) == 3
+
+    # Corrupting a non-terminal line MUST raise CorruptedTranscriptError
+    lines = p.transcript_file.read_text(encoding="utf-8").splitlines()
+    lines[0] = "CORRUPTED_FIRST_LINE"
+    p.transcript_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with pytest.raises(CorruptedTranscriptError, match="line 1"):
+        p.read_transcript(tolerate_corrupt_tail=True)
+
+

@@ -138,6 +138,7 @@ def test_cli_workflow_commands(tmp_path: Path):
     )
     assert res_comp.exit_code == 0
     assert "Differential Regression Analysis" in res_comp.stdout
+    assert "DRY-RUN MOCK MODE" in res_comp.stdout
 
     # 3. airframe run workflows/pr-reviewer
     res_run = runner.invoke(app, ["run", "workflows/pr-reviewer", "--input", "pr_diff_patch"])
@@ -149,3 +150,28 @@ def test_cli_workflow_commands(tmp_path: Path):
     assert res_init.exit_code == 0
     assert "Created workflow pack" in res_init.stdout
     assert (tmp_path / "new-agent" / "workflow.yaml").exists()
+
+
+def test_workflow_pack_tool_and_sensor_discovery():
+    """Verify WorkflowPack.load_tools() and WorkflowPack.load_sensors() discover components automatically."""
+    pr_pack = load_workflow("workflows/pr-reviewer")
+    pr_sensors = pr_pack.load_sensors()
+    assert any(s.name == "blocker_consistency" for s in pr_sensors)
+
+    calc_pack = load_workflow("workflows/calculator")
+    calc_tools = calc_pack.load_tools()
+    assert "calculate_compound_interest" in calc_tools
+    calc_sensors = calc_pack.load_sensors()
+    assert any(s.name == "compound_interest_math_validator" for s in calc_sensors)
+
+    weather_pack = load_workflow("workflows/weather-forecaster")
+    weather_tools = weather_pack.load_tools()
+    assert "geocode_location" in weather_tools
+    assert "get_hourly_forecast" in weather_tools
+    weather_sensors = weather_pack.load_sensors(
+        case_input={"expected_lat": 12.9716, "expected_lon": 77.5946, "expected_hour": 15}
+    )
+    sensor_names = {s.name for s in weather_sensors}
+    assert "coordinate_accuracy_validator" in sensor_names
+    assert "payload_pruning_validator" in sensor_names
+    assert "zero_hallucination_weather_validator" in sensor_names

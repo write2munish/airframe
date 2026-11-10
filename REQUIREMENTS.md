@@ -105,156 +105,88 @@ flowchart TD
 ### Phase 1: Core Engine, Contracts & Evaluation
 
 #### FR-1: Unified Model Adapter Gateway (Swappable Engines)
-- [ ] Abstract base class (`ModelAdapter`) defining a uniform interface:
+- [x] Abstract base class (`ModelAdapter`) defining a uniform async interface (`src/airframe/adapters/base.py`, verified in `tests/unit/test_adapters.py`):
   ```python
-  def invoke(self, prompt: str, **kwargs) -> str: ...
-  def invoke_contract(self, prompt: str, schema: type[T], **kwargs) -> T: ...
+  async def invoke(self, prompt: str, **kwargs) -> ModelResponse: ...
+  async def invoke_contract(self, prompt: str, schema: type[T], **kwargs) -> tuple[T, ModelResponse]: ...
   ```
-- [ ] Initial provider implementations:
-  - **Local/OSS Models:** OpenAI-compatible endpoint (Ollama, vLLM, LM Studio).
-  - **Cloud Providers:** Google Gemini, Anthropic Claude, OpenAI.
-- [ ] **Prompt Profiling:** Compile canonical task intent into provider-specific formats (e.g., XML tags for Claude, system instruction blocks for Gemini, Markdown sections for GPT).
+- [x] Initial provider implementations (verified offline in `tests/unit/test_adapters.py`; opt-in live HTTP checks in `tests/live/test_live_adapters.py`):
+  - **Local/OSS Models:** OpenAI-compatible endpoint (`OpenAICompatibleAdapter` for Ollama, vLLM, LM Studio, OpenAI).
+  - **Cloud Providers:** Google Gemini (`GeminiAdapter`), Anthropic Claude (`AnthropicAdapter`), OpenAI (`OpenAICompatibleAdapter`).
+- [x] **Prompt Profiling:** Compile canonical task intent into provider-specific formats via Jinja2 (`PromptProfiler` in `src/airframe/adapters/profiler.py`, verified in `tests/unit/test_adapters.py`).
 
 #### FR-2: Executable Guards & Schema Self-Repair
-- [ ] Enforce output schemas via Pydantic v2 / JSON Schema.
-- [ ] Automated validation & repair loop:
-  - Parse raw model output against target schema.
-  - On failure, catch `ValidationError` and formulate a focused feedback prompt showing the exact violation.
-  - Retry up to `max_retries` (default: 2) before raising a hard failure.
-- [ ] Payload bounds: Programmatically reject or truncate responses that breach size/token ceilings.
+- [x] Enforce output schemas via Pydantic v2 / JSON Schema (`ExecutableGuard`, `SchemaSensor` in `src/airframe/guards/executable.py` and `src/airframe/sensors/schema.py`, verified in `tests/unit/test_guards_and_sensors.py`).
+- [x] Automated validation & repair loop (`ModelAdapter.invoke_contract` + `run_with_retry`, verified in `tests/unit/test_adapters.py`).
+- [x] Payload bounds: Programmatically reject payloads breaching byte ceilings or forbidden substrings (`PayloadBounds`, verified in `tests/unit/test_guards_and_sensors.py`).
 
 #### FR-3: The Sensor Pipeline (Multi-Tier Evaluation)
-- [ ] **Tier 1 (Deterministic Sensors - Mandatory Gate):**
-  - Schema validity and field type checking.
-  - Regex pattern matching and exact keyword assertions.
-  - Code linting (Ruff/Flake8), type checks (Mypy), and execution exit codes.
-  - Zero false-positive / zero-flake baseline.
-- [ ] **Tier 2 (Semantic & Tool Sensors):**
-  - Tool invocation validation: correct function name, valid parameter values, and valid invocation order.
-  - Semantic distance: cosine similarity against golden outputs using fast embeddings.
-- [ ] **Tier 3 (Model-as-a-Judge / Rubric Gate):**
-  - Structured evaluation rubrics (factual accuracy, reasoning clarity, adherence).
-  - Reference-free and reference-based judging with calibrated temperature=0 scoring.
+- [x] **Tier 1 (Deterministic Sensors - Mandatory Gate):** `SchemaSensor`, `PythonASTSensor`, `RegexSensor`, `KeywordSensor`, `ExitCodeSensor` (`src/airframe/sensors/`, verified in `tests/unit/test_guards_and_sensors.py`), plus workflow sensor discovery (`WorkflowPack.load_sensors`, verified in `tests/unit/test_workflows_and_diff.py` & `tests/unit/test_cli.py`). *Note: external subprocess `ruff`/`mypy` wrappers are not bundled directly; arbitrary linters can be invoked via tools + `ExitCodeSensor`.*
+- [x] **Tier 2 (Semantic & Tool Sensors):** `ToolCallValidatorSensor` and `TokenOverlapSensor` (token Jaccard similarity, `src/airframe/sensors/tier2_semantic.py`, verified in `tests/unit/test_guards_and_sensors.py` & `tests/unit/test_tools.py`). *Note: uses deterministic Jaccard token overlap rather than dense vector embeddings.*
+- [x] **Tier 3 (Model-as-a-Judge / Rubric Gate):** `ModelJudgeSensor` with `JudgeRubric` and Tier 1 fast-fail short-circuiting (`src/airframe/sensors/tier3_judge.py`, verified in `tests/unit/test_guards_and_sensors.py`).
 
 #### FR-4: Dynamic Tool Scoping & Context Diet
-- [ ] Tool registry supporting tool grouping by task phase (e.g., `Discovery`, `Execution`, `Verification`).
-- [ ] Dynamic injector: Provide the model only with tools mapped to the active phase (max 3–5 tools at once).
-- [ ] Context budgeter: Measure prompt token footprint and warn when guide files exceed recommended token ceilings.
+- [x] Zero-decorator tool registry supporting phase grouping (`ToolRegistry` in `src/airframe/tools/registry.py`, verified in `tests/unit/test_tools.py`).
+- [x] Dynamic phase-scoped injector enforcing max 3–5 tools per phase (`ScopedToolInjector(max_tools_per_phase=5)` in `src/airframe/tools/scoper.py` + governed `ToolRunner` in `src/airframe/tools/runner.py`, verified in `tests/unit/test_tools.py` & `tests/integration/test_runtime_runner.py`).
+- [x] Context budgeter measuring guide token footprints and warning / erroring when exceeding limits (`ContextBudgeter` in `src/airframe/tools/scoper.py`, wired into `WorkflowRunner`, verified in `tests/unit/test_tools.py`).
 
 #### FR-5: Differential Regression & Baseline Diffing
-- [ ] CLI scorecard generator: Terminal table displaying Pass/Fail rate, latency (p50, p95), and token counts.
-- [ ] Exportable artifacts: Markdown summary and machine-readable JSON reports.
-- [ ] **Differential Comparator (`airframe compare`)**:
-  - Compare Run A (Baseline Model) vs Run B (Candidate Model).
-  - Detect regressions (cases passed by A but broken by B).
-  - Highlight improvements, cost delta, and latency trade-offs.
+- [x] CLI scorecard generator displaying Pass/Fail rate, latency (`p50`, `p95`), and token counts (`RunScorecard` in `src/airframe/telemetry/diff.py`, verified in `tests/unit/test_workflows_and_diff.py`).
+- [x] Exportable artifacts: Markdown (`render_markdown()`) and machine-readable JSON (`model_dump_json()`, verified in `tests/unit/test_workflows_and_diff.py`).
+- [x] **Differential Comparator (`airframe compare`)**: Compares Baseline vs Candidate via `WorkflowRunner` + real semantic assertions + `compare_scorecards`, flagging `DRY-RUN MOCK MODE` clearly when run offline (`src/airframe/cli.py`, verified in `tests/unit/test_workflows_and_diff.py`).
 
 ---
 
 ### Phase 2: Multi-Agent Systems, Long Horizons & Isolation
 
 #### FR-8: Dynamic Agent Registry & Blueprint Engine
-- [ ] Declarative Agent Blueprint schema (YAML / Pydantic):
-  ```yaml
-  name: "code-implementer"
-  role: "Senior Backend Developer"
-  system_prompt: "prompts/implementer.jinja2"
-  model_binding: "gemini-2.0-flash"
-  allowed_tools: ["read_file", "edit_file", "run_command"]
-  workspace_mode: "branch"
-  budget:
-    max_tokens: 150000
-    timeout_seconds: 600
-  ```
-- [ ] Runtime dynamic registration: `airframe.define_agent(blueprint)`.
-- [ ] Dynamic spawning: `airframe.spawn_agent(name_or_blueprint, task_prompt, parent_id)`.
-- [ ] Agent Lifecycle State Machine:
-  - States: `PENDING` $\rightarrow$ `RUNNING` $\rightarrow$ `WAITING_INPUT` $\rightarrow$ `COMPLETED` / `FAILED` / `KILLED`.
-  - Hierarchical tracking: Parent-child relationship tracking in an execution DAG.
+- [x] Declarative Agent Blueprint schema (YAML / Pydantic `AgentBlueprint` in `src/airframe/blueprints/schema.py`, verified in `tests/unit/test_blueprints.py`).
+- [x] Agent Registry (`AgentRegistry` in `src/airframe/blueprints/registry.py`, verified in `tests/unit/test_blueprints.py`) and strict `entrypoint_agent` resolution in `WorkflowRunner` (verified in `tests/integration/test_runtime_runner.py` & `tests/unit/test_cli.py`).
+- [x] Agent Lifecycle State Machine (`PENDING`, `RUNNING`, `WAITING_INPUT`, `COMPLETED`, `FAILED`, `CANCELLED` + parent-child DAG in `src/airframe/ipc/lifecycle.py`, verified in `tests/unit/test_orchestration.py`).
 
 #### FR-9: Dual-Layer Isolation Engine
-- [ ] **Context Window Isolation:**
-  - Every spawned sub-agent maintains its own isolated message history/transcript file (`transcript.jsonl`).
-  - Child agents communicate with parents strictly via structured completion contracts or compressed summaries.
-  - Intermediate scratch tokens are archived to disk but never injected into parent context.
-- [ ] **Workspace / Filesystem Isolation:**
-  - **`inherit` Mode:** Sub-agent executes in the parent's directory (read-only research or non-modifying analysis).
-  - **`branch` Mode (Git Worktrees):** Automatically spin up an isolated Git Worktree:
-    ```bash
-    git worktree add .airframe/worktrees/<agent_id> -b agent/<agent_id>
-    ```
-    All file reads/writes/commands are isolated to this directory.
-    On successful verification, the supervisor merges or creates a clean pull request; on failure, the worktree is deleted without dirtying the working directory.
-  - **`ephemeral_sandbox` Mode:** Isolated disposable temporary directory for untrusted code execution.
+- [x] **Context Window Isolation:** `ContextPartitioner` writes crash-safe `fsync` JSONL transcripts (`transcript.jsonl`), recovers from truncated tails via `.corrupt_tail` quarantine (`read_transcript`), and emits `CompressedHandoff` summaries (`src/airframe/isolation/context.py`, verified in `tests/unit/test_isolation.py`).
+- [x] **Workspace / Filesystem Isolation:** `get_workspace(mode=...)` (`src/airframe/isolation/workspace.py`) supporting:
+  - `inherit` (`SharedWorkspace`)
+  - `branch` (`WorktreeManager` with locked `.registry.lock`, `WorktreeConflictError` live-sibling protection, deterministic `base_commit` `get_diff()`, `SIGKILL` stale orphan reaper, and `SIGINT`/`SIGTERM`/`atexit` cleanup, verified in `tests/unit/test_isolation.py` & `tests/integration/test_system_integration.py`)
+  - `sandbox` (`EphemeralSandbox` tempdir cleanup, verified in `tests/unit/test_isolation.py`)
+- [ ] **Container Isolation (`workspace_mode="container"`):** **Deferred (per [ADR 0001](docs/adr/0001-workflow-vs-container-isolation.md))**.
 
 #### FR-10: Supervisor-Worker Orchestration Topologies
-- [ ] **Topology 1: Hierarchical (Supervisor / Worker Fleet):**
-  - Supervisor manages the master roadmap (`plan.md`) and delegates atomic subtasks to workers.
-  - Supervisor is shielded from low-level tool logs, only receiving structured status signals.
-- [ ] **Topology 2: Evaluator-Optimizer (Generator / Critic):**
-  - Worker writes code/output $\rightarrow$ Independent Evaluator runs sensors $\rightarrow$ Returns structured critique $\rightarrow$ Worker optimizes until tests pass.
-- [ ] **Topology 3: Router / Dispatcher:**
-  - Classifies user request and routes directly to the optimal specialized worker.
+- [x] **Topology 1: Hierarchical (`orchestrator-workers`):** `SupervisorAgent` + `WorkflowRunner._run_orchestrator_workers()` (`src/airframe/orchestration/supervisor.py`, `src/airframe/runner/engine.py`, verified in `tests/unit/test_orchestration.py`, `tests/integration/test_system_integration.py`, & `tests/integration/test_runtime_runner.py`).
+- [x] **Topology 2: Evaluator-Optimizer (`evaluator-optimizer`):** `EvaluatorOptimizerLoop` + `WorkflowRunner._run_evaluator_optimizer()` (`src/airframe/orchestration/evaluator_optimizer.py`, `src/airframe/runner/engine.py`, verified in `tests/unit/test_orchestration.py` & `tests/integration/test_runtime_runner.py`).
+- [ ] **Topology 3: Router / Dispatcher (`router`):** **Not Implemented** (`WorkflowManifest.topology` supports `"single-agent"`, `"orchestrator-workers"`, `"evaluator-optimizer"`).
 
 #### FR-11: Long-Horizon Persistence & Multi-Shift Durability
-- [ ] **Externalized State Management:**
-  - Automated persistence of:
-    - `plan.md`: Human and agent-readable high-level milestone progress.
-    - `task_queue.json`: Structured backlog of tasks (`pending`, `in_progress`, `done`).
-    - `progress.log`: Append-only handoff notes.
-- [ ] **Shift Turnover Engine (Context Compaction):**
-  - Monitor context window consumption ($T_{\text{used}} / T_{\text{max}}$).
-  - When consumption exceeds threshold (e.g., 65%), trigger automated shift turnover:
-    1. Active agent summarizes delta accomplishments into `progress.log`.
-    2. Commit active state to git worktree.
-    3. Terminate current session.
-    4. Spawn a fresh session with clean context, bootloaded strictly from disk state files.
+- [x] **Externalized State Management:** `DiskStateManager` (`atomic_write_text`, re-entrant `fcntl.flock`, `.bak` self-healing recovery) managing `plan.md`, `task_queue.json`, and `progress.log` (`src/airframe/state/disk.py`, verified in `tests/unit/test_long_horizon_and_governance.py` & `tests/integration/test_system_integration.py`).
+- [x] **Shift Turnover Engine:** `ShiftTurnoverEngine` (`should_turnover`, `execute_turnover(..., worktree_dir=...)` with real git checkpoint commits, in-memory history wipe, and `bootload_shift_prompt()` wired inside `WorkflowRunner`, verified in `tests/unit/test_long_horizon_and_governance.py` & `tests/integration/test_runtime_runner.py`).
 
 #### FR-12: Reactive IPC, Event Bus & Cancellation Cascades
-- [ ] **Typed Asynchronous Mailbox:**
-  - Inter-agent communication via typed messages: `send_message(recipient_id, message_payload)`.
-- [ ] **Reactive Wakeup (Zero Polling):**
-  - Parent agents enter a non-blocking waiting state while workers run in background.
-  - When a worker finishes or raises a blocker, the harness event loop automatically resumes the parent.
-- [ ] **Recursive Cancellation Cascades:**
-  - Terminating or timing out a parent agent recursively terminates all descendant sub-agents, halts running child processes, and cleans up temporary worktrees.
+- [x] **Typed Asynchronous Mailbox:** `EventBus` / `AgentMessage` (`src/airframe/ipc/bus.py`, verified in `tests/unit/test_orchestration.py`).
+- [x] **Reactive Wakeup (Zero Polling):** Async `asyncio.Queue`-backed wait/delivery inside `EventBus` and `SupervisorAgent` (`src/airframe/ipc/bus.py`, `src/airframe/orchestration/supervisor.py`, verified in `tests/unit/test_orchestration.py`).
+- [x] **Recursive Cancellation Cascades:** `LifecycleManager.cancel_cascade()` (`src/airframe/ipc/lifecycle.py`, verified in `tests/unit/test_orchestration.py`).
 
 #### FR-13: Resource Governance, Circuit Breakers & Budget Caps
-- [ ] **Recursion Depth Ceiling:** Hard limit on sub-agent nesting (default: max depth 2: Supervisor $\rightarrow$ Worker $\rightarrow$ Sub-worker).
-- [ ] **Spend & Token Ceilings:**
-  - Hard spend limits ($USD) and token counts per sub-agent and per global run.
-  - Immediate execution halt when budget thresholds are breached.
-- [ ] **Stall & Loop Detectors:**
-  - Detect repetitive identical tool calls with recurring errors (default: threshold 3).
-  - Automatically interrupt loop and escalate to supervisor or human.
-- [ ] **Human-in-the-Loop (HITL) Approval Gates:**
-  - Configurable policy engine flagging destructive actions (e.g., dropping databases, force pushes, external mutations) for interactive human confirmation.
+- [x] **Recursion Depth Ceiling:** `RecursionLimiter` enforced inside `SupervisorAgent.delegate_subtask()` (`src/airframe/governance/circuit_breakers.py`, `src/airframe/orchestration/supervisor.py`, verified in `tests/unit/test_long_horizon_and_governance.py` & `tests/integration/test_runtime_runner.py`).
+- [x] **Spend, Token, Turn & Wall-Clock Timeout Ceilings:** `BudgetTracker`, `MaxTurnsExceededError`, and `asyncio.wait_for(..., timeout=...)` enforced inside `WorkflowRunner` (verified in `tests/integration/test_runtime_runner.py`).
+- [x] **Stall & Loop Detectors:** `StallDetector` integrated into `ToolRunner` & `WorkflowRunner` (verified in `tests/unit/test_tools.py` & `tests/integration/test_runtime_runner.py`).
+- [x] **Human-in-the-Loop (HITL) Approval Gates:** `HumanApprovalGate` integrated into `ToolRunner` (verified in `tests/unit/test_long_horizon_and_governance.py` & `tests/unit/test_tools.py`).
 
 #### FR-14: Hierarchical Observability & Distributed Tracing
-- [ ] Unified OpenTelemetry-compatible trace trees linking Root Task $\rightarrow$ Supervisor $\rightarrow$ Child Agents $\rightarrow$ Tool Invocations $\rightarrow$ Sensor Results.
-- [ ] Per-agent session replay: Record complete step trajectories into `transcript.jsonl` for offline debugging, regression testing, and post-mortem analysis.
+- [x] Hierarchical W3C-compatible trace trees (`AirframeTracer`, `SpanRecord`, `contextvars` async propagation across `Root -> Supervisor -> Worker -> Tool -> Sensor`, `build_trace_tree()`, optional best-effort OpenTelemetry mirror in `src/airframe/telemetry/tracer.py`, verified in `tests/unit/test_telemetry_tracer.py` & `tests/integration/test_runtime_runner.py`).
+- [x] Per-agent session replay: `transcript.jsonl` (`fsync` + tail recovery in `src/airframe/isolation/context.py`, verified in `tests/unit/test_isolation.py`) and `.airframe/traces/<trace_id>.jsonl` (`load_trace`, verified in `tests/unit/test_telemetry_tracer.py`).
 
 ---
 
 ### Phase 3: Workflow Packaging & Developer Experience
 
 #### FR-15: Self-Contained Workflow Packs (Domain Colocation)
-- [ ] Standardized directory structure for new use-case workflows under `workflows/<use-case-name>/`:
-  ```
-  workflows/<use-case-name>/
-  ├── workflow.yaml                # Master topology, agents, and governance config
-  ├── blueprints/                  # Agent blueprints bound to specific roles/engines
-  ├── guides/                      # Task specs, instructions, and prompt templates
-  ├── guards/                      # Pydantic v2 output schemas and byte boundaries
-  ├── sensors/                     # Tier 1, 2, and 3 verification checks
-  ├── tools/                       # Scoped tool definitions and MCP adapters
-  └── testbed/                     # Smoke tests and golden regression datasets
-  ```
-- [ ] **CLI Workflow Commands**:
-  - `airframe run workflows/<name> [--input key=val] [--engine <model>]`: Execute a workflow.
-  - `airframe test workflows/<name>`: Run the workflow against its local testbed.
-  - `airframe compare workflows/<name> --baseline <modelA> --candidate <modelB>`: Run differential regression test suite across engines.
-  - `airframe init workflow <name>`: Scaffold a new boilerplate workflow pack.
+- [x] Standardized directory & lightweight workflow packs (`WorkflowManifest`, `WorkflowPack.load_tools()`, `WorkflowPack.load_sensors()` in `src/airframe/workflows/loader.py`, verified in `tests/unit/test_workflows_and_diff.py`), including `workflows/pr-reviewer`, `workflows/basic-calculator`, `workflows/calculator`, and `workflows/weather-forecaster`.
+- [x] **CLI Workflow Commands (`src/airframe/cli.py`, verified in `tests/unit/test_cli.py`, `tests/unit/test_workflows_and_diff.py`, & `tests/unit/test_weather_forecaster.py`)**:
+  - `airframe run <workflow> [-i query] [-e engine] [--mock]`: Delegates to `WorkflowRunner` with strict `entrypoint_agent` & governance enforcement.
+  - `airframe test <workflow> [--live|--mock] [-e engine]`: Executes testbed with `evaluate_expected_assertions()` + discovered workflow sensors (exits `1` on mismatch or missing `--live` keys).
+  - `airframe compare <workflow> --baseline <modelA> --candidate <modelB> [--mock]`: Runs differential scorecard with explicit `DRY-RUN MOCK MODE` banner when offline.
+  - `airframe init workflow <name> [--light]`: Scaffolds multi-agent or single-file workflow packs.
 
 ---
 
@@ -277,38 +209,33 @@ airframe/
 ├── pyproject.toml
 │
 ├── workflows/                        # Self-contained use-case packs (FR-15)
-│   ├── pr-reviewer/                  # Example: Pull Request Code Reviewer
-│   │   ├── workflow.yaml             # Manifest & orchestration config
-│   │   ├── blueprints/               # Agent specifications (supervisor, reviewer, critic)
-│   │   ├── guides/                   # Task instructions & prompt templates
-│   │   ├── guards/                   # Pydantic output schemas (CodeReviewReport)
-│   │   ├── sensors/                  # Deterministic checks & rubric judges
-│   │   ├── tools/                    # Workflow-specific tools & linters
-│   │   └── testbed/                  # Smoke tests and golden regression cases
-│   └── feature-builder/              # Example: Long-running feature implementation
-│       ├── workflow.yaml
-│       └── ...
+│   ├── pr-reviewer/                  # Pull Request Code Reviewer (multi-file pack)
+│   ├── basic-calculator/             # Lightweight arithmetic + compound interest pack
+│   ├── calculator/                   # Compound interest pack with math verification sensor
+│   └── weather-forecaster/           # Geospatial weather pack with pruning & hallucination sensors
 │
 ├── src/
 │   └── airframe/
 │       ├── adapters/                 # Swappable model engines (Gemini, Claude, OpenAI, Ollama)
 │       ├── blueprints/               # Blueprint loader & schema validation (FR-8)
-│       ├── orchestration/            # Supervisor, topologies, shift turnover (FR-10, FR-11)
-│       ├── isolation/                # Git worktrees, transcript partitioners (FR-9)
-│       ├── ipc/                      # Async mailbox, event bus, reactive wakeups (FR-12)
+│       ├── orchestration/            # Supervisor, Evaluator-Optimizer, shift turnover (FR-10, FR-11)
+│       ├── isolation/                # Locked Git worktrees, sandboxes, transcript partitioners (FR-9)
+│       ├── ipc/                      # Async mailbox, event bus, lifecycle cancellation cascades (FR-12)
 │       ├── guards/                   # Executable guard runner, auto-repair loops (FR-2)
 │       ├── sensors/                  # Tier 1, 2, and 3 evaluators (FR-3)
-│       ├── tools/                    # Tool registry, dynamic injector (FR-4)
-│       ├── governance/               # Budget tracker, loop detector, HITL gates (FR-13)
-│       ├── state/                    # State externalization (plan.md, task_queue.json) (FR-11)
-│       ├── telemetry/                # OpenTelemetry traces, session replay (FR-14)
-│       ├── runner/                   # Core async execution engine
-│       └── cli.py                    # CLI (`airframe run`, `airframe compare`, `airframe init`)
+│       ├── tools/                    # Zero-decorator registry, phase scoper (max 5/phase), ToolRunner (FR-4)
+│       ├── governance/               # Budget tracker, stall/recursion detectors, HITL gates (FR-13)
+│       ├── state/                    # Crash-safe state externalization (plan.md, task_queue.json) (FR-11)
+│       ├── telemetry/                # Hierarchical JSONL AirframeTracer, scorecards, diff reports (FR-5, FR-14)
+│       ├── runner/                   # Canonical WorkflowRunner async engine (FR-10..FR-13)
+│       ├── workflows/                # WorkflowPack loader, scaffold, tool & sensor discovery (FR-15)
+│       └── cli.py                    # CLI (`airframe run`, `test`, `compare`, `init`)
 │
 ├── tests/
-│   ├── unit/                         # Unit tests for core airframe modules
-│   └── integration/                  # End-to-end multi-agent & worktree tests
-└── datasets/
-    ├── smoke.yaml                    # Global engine sanity checks
-    └── benchmark_core.yaml           # Global provider benchmark suite
+│   ├── unit/                         # Unit tests for all core airframe modules & CLI
+│   ├── integration/                  # End-to-end runtime runner, worktree crash recovery & governance tests
+│   └── live/                         # Opt-in vendor HTTP smoke tests (AIRFRAME_LIVE_TESTS=1)
+└── docs/
+    ├── adr/                          # Architecture Decision Records (`0001-workflow-vs-container-isolation.md`)
+    └── specs/                        # Hardening & gap remediation specifications
 ```

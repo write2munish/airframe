@@ -3,6 +3,7 @@
 from airframe.isolation.context import (
     CompressedHandoff,
     ContextPartitioner,
+    CorruptedTranscriptError,
     TranscriptEntry,
 )
 from airframe.isolation.sandbox import EphemeralSandbox
@@ -13,16 +14,22 @@ from airframe.isolation.workspace import (
     WorktreeWorkspace,
     get_workspace,
 )
-from airframe.isolation.worktree import WorktreeError, WorktreeManager
+from airframe.isolation.worktree import (
+    WorktreeConflictError,
+    WorktreeError,
+    WorktreeManager,
+)
 
 __all__ = [
     "CompressedHandoff",
     "ContextPartitioner",
+    "CorruptedTranscriptError",
     "EphemeralSandbox",
     "SandboxWorkspace",
     "SharedWorkspace",
     "TranscriptEntry",
     "WorkspaceStrategy",
+    "WorktreeConflictError",
     "WorktreeError",
     "WorktreeManager",
     "WorktreeWorkspace",

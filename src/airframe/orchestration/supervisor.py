@@ -8,10 +8,12 @@ from typing import Any, Callable, Coroutine
 from pydantic import BaseModel, Field
 
 from airframe.blueprints.schema import AgentBlueprint
+from airframe.governance.circuit_breakers import RecursionLimiter
 from airframe.ipc.bus import AgentMessage, EventBus
 from airframe.ipc.lifecycle import AgentState, LifecycleManager
 from airframe.isolation.context import CompressedHandoff, ContextPartitioner
 from airframe.state.disk import DiskStateManager
+from airframe.telemetry.tracer import AirframeTracer, get_active_tracer
 
 
 class SubtaskSpec(BaseModel):
@@ -43,11 +45,15 @@ class SupervisorAgent:
         bus: EventBus | None = None,
         lifecycle: LifecycleManager | None = None,
         state_manager: DiskStateManager | None = None,
+        max_depth: int = 2,
+        tracer: AirframeTracer | None = None,
     ) -> None:
         self.supervisor_id = supervisor_id
         self.bus = bus or EventBus()
         self.lifecycle = lifecycle or LifecycleManager()
         self.state_manager = state_manager
+        self.recursion_limiter = RecursionLimiter(max_depth=max_depth)
+        self.tracer = tracer
         self.bus.register(self.supervisor_id)
         self.lifecycle.register_agent(self.supervisor_id)
 
@@ -73,112 +79,140 @@ class SupervisorAgent:
         self,
         subtask: SubtaskSpec,
         worker_runner: Callable[[SubtaskSpec], Coroutine[Any, Any, CompressedHandoff]] | None = None,
+        depth: int = 1,
     ) -> CompressedHandoff:
-        """Spawn and delegate a subtask to an isolated worker, receiving a compressed handoff."""
-        worker_id = f"worker_{subtask.task_id}"
-        runner = worker_runner or self._default_worker_runner
+        """Spawn and delegate a subtask to an isolated worker, enforcing recursion depth and span tracing."""
+        self.recursion_limiter.check_depth(depth)
 
-        # Register child in lifecycle tree
-        self.lifecycle.register_agent(worker_id, parent_id=self.supervisor_id)
-        self.bus.register(worker_id)
+        active_tracer = self.tracer or get_active_tracer()
 
-        # Update disk state if state manager is wired
-        if self.state_manager is not None:
-            try:
-                self.state_manager.update_task_status(
-                    subtask.task_id,
-                    status="IN_PROGRESS",
-                    assigned_agent=worker_id,
+        async def _execute_delegation() -> CompressedHandoff:
+            worker_id = f"worker_{subtask.task_id}"
+            runner = worker_runner or self._default_worker_runner
+
+            # Register child in lifecycle tree
+            self.lifecycle.register_agent(worker_id, parent_id=self.supervisor_id)
+            self.bus.register(worker_id)
+
+            # Update disk state if state manager is wired
+            if self.state_manager is not None:
+                try:
+                    self.state_manager.update_task_status(
+                        subtask.task_id,
+                        status="IN_PROGRESS",
+                        assigned_agent=worker_id,
+                    )
+                except KeyError:
+                    pass
+
+            # Notify via event bus
+            await self.bus.send(
+                AgentMessage(
+                    sender_id=self.supervisor_id,
+                    recipient_id=worker_id,
+                    topic="task_assignment",
+                    payload=subtask.model_dump(),
                 )
-            except KeyError:
-                pass
-
-        # Notify via event bus
-        await self.bus.send(
-            AgentMessage(
-                sender_id=self.supervisor_id,
-                recipient_id=worker_id,
-                topic="task_assignment",
-                payload=subtask.model_dump(),
             )
-        )
 
-        # Execute worker asynchronously
-        task = asyncio.create_task(runner(subtask))
-        self.lifecycle.set_task(worker_id, task)
+            # Execute worker asynchronously (contextvars propagate parent span_id to task)
+            task = asyncio.create_task(runner(subtask))
+            self.lifecycle.set_task(worker_id, task)
 
-        try:
-            handoff = await task
-            self.lifecycle.set_state(worker_id, AgentState.COMPLETED)
-            if self.state_manager is not None:
-                try:
-                    self.state_manager.update_task_status(
-                        subtask.task_id,
-                        status="DONE",
-                        result_summary=handoff.final_output,
-                        assigned_agent=worker_id,
-                    )
-                except KeyError:
-                    pass
-            return handoff
-        except asyncio.CancelledError:
-            self.lifecycle.set_state(worker_id, AgentState.CANCELLED)
-            if self.state_manager is not None:
-                try:
-                    self.state_manager.update_task_status(
-                        subtask.task_id,
-                        status="FAILED",
-                        result_summary="Task cancelled by supervisor",
-                        assigned_agent=worker_id,
-                    )
-                except KeyError:
-                    pass
-            raise
-        except Exception as err:
-            self.lifecycle.set_state(worker_id, AgentState.FAILED)
-            if self.state_manager is not None:
-                try:
-                    self.state_manager.update_task_status(
-                        subtask.task_id,
-                        status="FAILED",
-                        result_summary=f"Worker failed: {err}",
-                        assigned_agent=worker_id,
-                    )
-                except KeyError:
-                    pass
-            return CompressedHandoff(
-                agent_id=worker_id,
-                status="FAILED",
-                final_output=f"Worker failed: {err}",
-                tokens_discarded=0,
-                total_steps=1,
-            )
+            try:
+                handoff = await task
+                self.lifecycle.set_state(worker_id, AgentState.COMPLETED)
+                if self.state_manager is not None:
+                    try:
+                        self.state_manager.update_task_status(
+                            subtask.task_id,
+                            status="DONE",
+                            result_summary=handoff.final_output,
+                            assigned_agent=worker_id,
+                        )
+                    except KeyError:
+                        pass
+                return handoff
+            except asyncio.CancelledError:
+                self.lifecycle.set_state(worker_id, AgentState.CANCELLED)
+                if self.state_manager is not None:
+                    try:
+                        self.state_manager.update_task_status(
+                            subtask.task_id,
+                            status="FAILED",
+                            result_summary="Task cancelled by supervisor",
+                            assigned_agent=worker_id,
+                        )
+                    except KeyError:
+                        pass
+                raise
+            except Exception as err:
+                self.lifecycle.set_state(worker_id, AgentState.FAILED)
+                if self.state_manager is not None:
+                    try:
+                        self.state_manager.update_task_status(
+                            subtask.task_id,
+                            status="FAILED",
+                            result_summary=f"Worker failed: {err}",
+                            assigned_agent=worker_id,
+                        )
+                    except KeyError:
+                        pass
+                return CompressedHandoff(
+                    agent_id=worker_id,
+                    status="FAILED",
+                    final_output=f"Worker failed: {err}",
+                    tokens_discarded=0,
+                    total_steps=1,
+                )
+
+        if active_tracer is not None:
+            async with active_tracer.start_span(
+                f"worker.{subtask.task_id}",
+                kind="worker",
+                attributes={"task_id": subtask.task_id, "depth": depth, "blueprint": subtask.assigned_blueprint},
+            ):
+                return await _execute_delegation()
+        return await _execute_delegation()
 
     async def run_plan(
         self,
         goal: str,
         subtasks: list[SubtaskSpec],
         worker_runner: Callable[[SubtaskSpec], Coroutine[Any, Any, CompressedHandoff]] | None = None,
+        depth: int = 1,
     ) -> SupervisorResult:
         """Execute a sequence of subtasks, collecting handoffs and shielding context."""
-        completed: list[CompressedHandoff] = []
-        failed: list[str] = []
-        tokens_shielded = 0
+        active_tracer = self.tracer or get_active_tracer()
 
-        for subtask in subtasks:
-            handoff = await self.delegate_subtask(subtask, worker_runner)
-            tokens_shielded += handoff.tokens_discarded
+        async def _run_subtasks() -> SupervisorResult:
+            completed: list[CompressedHandoff] = []
+            failed: list[str] = []
+            tokens_shielded = 0
 
-            if handoff.status == "SUCCESS":
-                completed.append(handoff)
-            else:
-                failed.append(subtask.task_id)
+            for subtask in subtasks:
+                handoff = await self.delegate_subtask(subtask, worker_runner, depth=depth)
+                tokens_shielded += handoff.tokens_discarded
 
-        overall_status = "SUCCESS" if not failed else "PARTIAL_FAILURE"
-        return SupervisorResult(
-            goal=goal,
-            status=overall_status,
-            completed_subtasks=completed,
-            failed_subtasks=failed,
-            total_tokens_shielded=tokens_shielded,
-        )
+                if handoff.status == "SUCCESS":
+                    completed.append(handoff)
+                else:
+                    failed.append(subtask.task_id)
+
+            overall_status = "SUCCESS" if not failed else "PARTIAL_FAILURE"
+            return SupervisorResult(
+                goal=goal,
+                status=overall_status,
+                completed_subtasks=completed,
+                failed_subtasks=failed,
+                total_tokens_shielded=tokens_shielded,
+            )
+
+        if active_tracer is not None:
+            async with active_tracer.start_span(
+                f"supervisor.{self.supervisor_id}",
+                kind="supervisor",
+                attributes={"goal": goal[:160], "subtask_count": len(subtasks)},
+            ):
+                return await _run_subtasks()
+        return await _run_subtasks()

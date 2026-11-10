@@ -5,7 +5,7 @@
 $$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/tests-76%20offline%20passed-brightgreen.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-79%20offline%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -48,7 +48,18 @@ airframe --version
 airframe info
 ```
 
-### 3. Run Automated Tests (76/76 Offline Passing)
+### 3. 5-Minute Developer Showcase (0 API Keys Required)
+
+```bash
+# Run the interactive 5-act showcase (contracts, scoped tools, SIGKILL worktree reap, shift turnover, W3C trace tree):
+PYTHONPATH=src python3 examples/showcase_walkthrough.py
+
+# Or run the multi-agent showcase packs directly via CLI:
+airframe test workflows/patch-verifier --mock        # evaluator-optimizer + AST safety sensor
+airframe test workflows/code-auditor-swarm --mock    # orchestrator-workers + parallel tool delegation
+```
+
+### 4. Run Automated Tests (79/79 Offline Passing)
 
 ```bash
 # Run deterministic offline unit and integration suite (zero external API keys required):
@@ -179,8 +190,14 @@ airframe/
 ├── REQUIREMENTS.md                   # Complete architectural requirements (FR-1 to FR-15)
 ├── pyproject.toml                    # Package metadata and dependencies
 ├── docs/
+│   ├── SHOWCASE.md                   # 5-minute developer quickstart & 5-act showcase guide
+│   ├── EXTENDING.md                  # Plug-in guide: adapters, sensors, tools, workspaces, topologies
+│   ├── WRITING_WORKFLOWS.md          # Step-by-step Workflow Pack authoring handbook
 │   ├── adr/                          # Architecture Decision Records (ADR 0001)
 │   └── specs/                        # Remediation & architecture specifications
+│
+├── examples/
+│   └── showcase_walkthrough.py       # One-command deterministic 5-act showcase script
 │
 ├── src/
 │   └── airframe/
@@ -203,13 +220,16 @@ airframe/
 │   ├── unit/                         # Deterministic unit suites (`test_adapters.py`, `test_cli.py`, `test_isolation.py`, `test_tools.py`, `test_telemetry_tracer.py`, etc.)
 │   ├── integration/                  # End-to-end runtime, worktree crash recovery & governance suites (`test_system_integration.py`, `test_runtime_runner.py`)
 │   └── live/                         # Opt-in live vendor HTTP smoke tests (`AIRFRAME_LIVE_TESTS=1`)
-└── workflows/                        # Self-contained use-case packs (`pr-reviewer`, `basic-calculator`, `calculator`, `weather-forecaster`)
+└── workflows/                        # Self-contained packs (`pr-reviewer`, `basic-calculator`, `calculator`, `weather-forecaster`, `patch-verifier`, `code-auditor-swarm`)
 ```
 
 ---
 
 ## Detailed Specifications & Planning
 
+* **[docs/SHOWCASE.md](docs/SHOWCASE.md)**: 5-minute developer quickstart and interactive 5-act showcase guide.
+* **[docs/EXTENDING.md](docs/EXTENDING.md)**: Complete guide to extending adapters, tools, sensors, workspaces, topologies, and traces.
+* **[docs/WRITING_WORKFLOWS.md](docs/WRITING_WORKFLOWS.md)**: Step-by-step guide to creating `--light` and multi-agent Workflow Packs.
 * **[INSTALLATION.md](INSTALLATION.md)**: Full setup instructions and model provider credentials guide.
 * **[REQUIREMENTS.md](REQUIREMENTS.md)**: Full functional requirements (FR-1 through FR-15) and non-functional requirements (NFR-1 through NFR-5).
 * **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)**: 6-phase engineering roadmap, milestone deliverables, and critical path.

@@ -1,0 +1,7 @@
+- id: "swarm-clean-helper"
+  description: "Audit clean helper function via orchestrator-workers delegation"
+  input:
+    query: "Audit auth_utils.py: def hash_token(val: str) -> str: return hashlib.sha256(val.encode()).hexdigest()"
+  expected_output:
+    risk_level: "LOW"
+    passed: true

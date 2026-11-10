@@ -65,8 +65,9 @@ def _mock_field_value(field_name: str, field_type: str, prompt: str) -> Any:
     lower_name = field_name.lower()
     if lower_name == "status":
         return "SUCCESS"
+    clean_prompt = prompt.split("[TASK]\n", 1)[-1].split("\n\n[", 1)[0].strip()
     if lower_name == "summary":
-        return f"Processed request: {prompt[:60]}..."
+        return f"Processed request: {clean_prompt[:60]}..."
     if lower_name in ("user_id", "id"):
         return 101
     if lower_name in ("username", "name"):
@@ -96,6 +97,8 @@ def _mock_field_value(field_name: str, field_type: str, prompt: str) -> Any:
         return []
     if field_type == "object":
         return {}
+    if any(k in lower_name for k in ("python_code", "code_snippet", "snippet")) or lower_name == "code":
+        return "def solve(x: int) -> int:\n    return x * 2\n"
     return "2026-11-06" if "date" in lower_name else f"Verified {field_name}"
 
 
@@ -136,6 +139,9 @@ def _synthesize_from_json_schema(
             continue
         if "default" in field_spec and field_spec["default"] is not None:
             data[field_name] = field_spec["default"]
+            continue
+        if "enum" in field_spec and isinstance(field_spec["enum"], list) and field_spec["enum"]:
+            data[field_name] = field_spec["enum"][0]
             continue
 
         f_type = field_spec.get("type")

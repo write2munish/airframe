@@ -1,0 +1,12 @@
+name: "security-worker"
+role: "Security Subtask Specialist"
+description: "Inspects delegated code snippets in an isolated context window and returns compressed findings."
+system_prompt: "guides/worker_spec.md"
+engine_binding: "gemini-2.0-flash"
+allowed_tools:
+  - "scan_diff_markers"
+workspace_mode: "inherit"
+budget:
+  max_tokens: 30000
+  max_turns: 4
+  timeout_seconds: 60

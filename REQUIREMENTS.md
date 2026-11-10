@@ -212,7 +212,11 @@ airframe/
 │   ├── pr-reviewer/                  # Pull Request Code Reviewer (multi-file pack)
 │   ├── basic-calculator/             # Lightweight arithmetic + compound interest pack
 │   ├── calculator/                   # Compound interest pack with math verification sensor
-│   └── weather-forecaster/           # Geospatial weather pack with pruning & hallucination sensors
+│   ├── weather-forecaster/           # Geospatial weather pack with pruning & hallucination sensors
+│   ├── patch-verifier/               # Evaluator-Optimizer pack with AST safety verification
+│   └── code-auditor-swarm/           # Orchestrator-Workers pack with parallel tool delegation
+│
+├── examples/                         # Interactive quickstart walkthroughs (`showcase_walkthrough.py`)
 │
 ├── src/
 │   └── airframe/

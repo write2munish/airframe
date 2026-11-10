@@ -1,0 +1,6 @@
+- id: "patch-smoke-01"
+  description: "Synthesize a pure Python helper passing AST and safety sensors"
+  input:
+    query: "Write a clean Python helper function solve(x: int) -> int that doubles x without using eval()."
+  expected_output:
+    passed: true

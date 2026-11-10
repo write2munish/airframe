@@ -1,0 +1,23 @@
+id: "patch-verifier"
+version: "1.0.0"
+description: "Evaluator-Optimizer showcase workflow that writes and deterministically verifies AST-safe Python code."
+topology: "evaluator-optimizer"
+workspace_mode: "inherit"
+entrypoint_agent: "patch-author"
+engine_binding: "gemini-2.0-flash"
+tools:
+  - "analyze_python_snippet"
+
+system_prompt: |
+  You are an expert Python engineer operating inside an Evaluator-Optimizer loop.
+  Generate clean, type-annotated, deterministic Python code fulfilling the user's request.
+  Never use dynamic code execution primitives such as eval(), exec(), or os.system().
+  Use analyze_python_snippet to validate your snippet if unsure, then emit VerifiedPatchReport.
+
+governance:
+  max_turns: 4
+  timeout_seconds: 60
+  stall_threshold: 2
+  max_cost_usd: 0.10
+
+testbed: "testbed.yaml"

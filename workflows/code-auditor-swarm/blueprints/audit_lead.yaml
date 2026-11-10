@@ -1,0 +1,11 @@
+name: "audit-lead"
+role: "Lead Orchestrator"
+description: "Decomposes audit requests into subtasks and synthesizes shielded worker handoffs into SwarmAuditReport."
+system_prompt: "guides/lead_spec.md"
+engine_binding: "gemini-2.0-flash"
+allowed_tools: []
+workspace_mode: "inherit"
+budget:
+  max_tokens: 60000
+  max_turns: 6
+  timeout_seconds: 120

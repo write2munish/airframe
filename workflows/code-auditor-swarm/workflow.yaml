@@ -1,0 +1,19 @@
+id: "code-auditor-swarm"
+version: "1.0.0"
+description: "Orchestrator-Workers showcase workflow delegating security & quality inspection across specialist blueprints."
+topology: "orchestrator-workers"
+workspace_mode: "inherit"
+entrypoint_agent: "audit-lead"
+
+# Worker listed before lead intentionally to demonstrate strict entrypoint_agent resolution.
+agents:
+  - "blueprints/security_worker.yaml"
+  - "blueprints/audit_lead.yaml"
+
+governance:
+  max_turns: 8
+  timeout_seconds: 120
+  stall_threshold: 2
+  max_cost_usd: 0.25
+
+testbed: "testbed/smoke.yaml"

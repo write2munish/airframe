@@ -230,6 +230,9 @@ def _synthesize_from_model(schema: type[BaseModel], prompt: str) -> dict[str, An
 class MockExecutionAdapter(ModelAdapter):
     """Deterministic offline adapter used when running with --mock or without external API credentials."""
 
+    def __init__(self, model_name: str = "mock-engine", **kwargs: Any) -> None:
+        super().__init__(model_name=model_name, **kwargs)
+
     @property
     def provider_name(self) -> str:
         return "mock"

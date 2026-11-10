@@ -4,25 +4,23 @@ Run every capability in **Airframe** end-to-end in under 5 minutes—zero API ke
 
 ---
 
-## Option 1: One-Command Interactive Showcase (0.5s, Zero API Keys)
+## Option 1: One-Command Python Quickstart (~100 Lines, Zero API Keys)
 
-Run [`examples/showcase_walkthrough.py`](../examples/showcase_walkthrough.py) to watch all 5 engineering pillars execute live in a temporary sandbox:
+Run [`examples/showcase_walkthrough.py`](../examples/showcase_walkthrough.py) to watch Airframe's core engine, multi-topology runner, governance breakers, disk state, and trace trees run end-to-end in under 1 second:
 
 ```bash
 PYTHONPATH=src python3 examples/showcase_walkthrough.py
 ```
 
-What this executes deterministically:
-1. **Act 1 — Engine Swap & Contract Self-Repair:** Resolves `gemini`, `anthropic`, `openai`, and `ollama` behind one interface, and watches `invoke_contract` auto-repair malformed JSON on retry.
-2. **Act 2 — Zero-Decorator Tools & Phase Ceiling:** Calls `workflows/basic-calculator/tools.py` through `WorkflowRunner`, then demonstrates `ScopedToolInjector` blocking a 6-tool phase (`ToolScopeExceededError`).
-3. **Act 3 — Worktree Isolation, Live-Peer Lock & `SIGKILL` Crash Recovery:** Spawns a subprocess claiming a Git worktree, verifies `WorktreeConflictError` against concurrent overwrite, kills the child with `SIGKILL` (`-9`), reaps the orphan cleanly via `reap_stale_worktrees()`, and rescues a crash-truncated `transcript.jsonl`.
-4. **Act 4 — Long-Horizon Shifts & Circuit Breakers:** Crosses the 65% shift threshold in `branch` mode (`airframe: shift 1 checkpoint` commit + history wipe -> `[SHIFT 2]` bootload), then trips `StallDetector` after 3 identical tool failures.
-5. **Act 5 — Multi-Agent Critique, Swarm Delegation & Trace Replay:**
-   * Runs [`workflows/patch-verifier`](../workflows/patch-verifier/workflow.yaml) (`evaluator-optimizer`) rejecting unsafe `eval(...)` in Iteration 1 and repairing cleanly in Iteration 2.
-   * Runs [`workflows/code-auditor-swarm`](../workflows/code-auditor-swarm/workflow.yaml) (`orchestrator-workers`) fanning out parallel workers calling `scan_diff_markers`.
-   * Prints the reconstructed W3C parent-child trace tree from `.airframe/traces/<trace_id>.jsonl` (`Root -> Supervisor -> Worker -> Model + Tool -> Sensor`).
+What this demonstrates in 4 concise steps:
+1. **Engine Swap + Executable Contracts:** Resolves `gemini`, `anthropic`, `openai`, and `ollama` behind one interface and runs `invoke_contract` against a Pydantic model.
+2. **Same Runner Across All 3 Topologies:** Runs [`workflows/basic-calculator`](../workflows/basic-calculator/workflow.yaml) (`single-agent`), [`workflows/patch-verifier`](../workflows/patch-verifier/workflow.yaml) (`evaluator-optimizer`), and [`workflows/code-auditor-swarm`](../workflows/code-auditor-swarm/workflow.yaml) (`orchestrator-workers`) with their auto-discovered `sensors.py`.
+3. **Guards, Breakers & Externalized State:** Shows `ExecutableGuard` rejecting malformed JSON, `StallDetector` halting 3 repeated failures, and `DiskStateManager` atomically persisting `task_queue.json`.
+4. **W3C Trace Tree Replay:** Reconstructs and prints the parent-child span hierarchy from `.airframe/traces/<trace_id>.jsonl` using `load_trace()` and `build_trace_tree()`.
 
-To run Act 1 against a real LLM provider instead:
+> **Deep-Dive Crash-Durability & Worktree Proofs:** Real `SIGKILL` (`-9`) worktree orphan reaping, live-sibling `WorktreeConflictError`, truncated `transcript.jsonl` recovery, and 4-turn `ShiftTurnoverEngine` git checkpointing are verified automatically in [`tests/unit/test_isolation.py`](../tests/unit/test_isolation.py) and [`tests/integration/test_runtime_runner.py`](../tests/integration/test_runtime_runner.py).
+
+To run the walkthrough against a real LLM provider instead:
 
 ```bash
 export GEMINI_API_KEY="your-key"

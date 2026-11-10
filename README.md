@@ -51,7 +51,7 @@ airframe info
 ### 3. 5-Minute Developer Showcase (0 API Keys Required)
 
 ```bash
-# Run the interactive 5-act showcase (contracts, scoped tools, SIGKILL worktree reap, shift turnover, W3C trace tree):
+# Run the concise 100-line Python quickstart (contracts, 3 topologies, guards, stall breaker, W3C trace tree):
 PYTHONPATH=src python3 examples/showcase_walkthrough.py
 
 # Or run the multi-agent showcase packs directly via CLI:

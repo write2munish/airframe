@@ -67,5 +67,5 @@ def test_interactive_showcase_walkthrough_script() -> None:
         timeout=60,
     )
     assert proc.returncode == 0, f"STDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}"
-    assert "All 5 Showcase Acts completed cleanly" in proc.stdout
+    assert "Airframe Quickstart completed cleanly" in proc.stdout
     assert "workflow.code-auditor-swarm (root)" in proc.stdout

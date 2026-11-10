@@ -182,10 +182,11 @@ flowchart TD
 
 #### FR-15: Self-Contained Workflow Packs (Domain Colocation)
 - [x] Standardized directory & lightweight workflow packs (`WorkflowManifest`, `WorkflowPack.load_tools()`, `WorkflowPack.load_sensors()` in `src/airframe/workflows/loader.py`, verified in `tests/unit/test_workflows_and_diff.py`), including `workflows/pr-reviewer`, `workflows/basic-calculator`, `workflows/calculator`, and `workflows/weather-forecaster`.
-- [x] **CLI Workflow Commands (`src/airframe/cli.py`, verified in `tests/unit/test_cli.py`, `tests/unit/test_workflows_and_diff.py`, & `tests/unit/test_weather_forecaster.py`)**:
-  - `airframe run <workflow> [-i query] [-e engine] [--mock]`: Delegates to `WorkflowRunner` with strict `entrypoint_agent` & governance enforcement.
+- [x] **CLI Workflow Commands (`src/airframe/cli.py`, verified in `tests/unit/test_cli.py`, `tests/unit/test_workflows_and_diff.py`, `tests/unit/test_weather_forecaster.py`, & `tests/unit/test_showcase_workflows.py`)**:
+  - `airframe run <workflow> [-i query] [-e engine] [--mock] [--trace]`: Delegates to `WorkflowRunner` with strict `entrypoint_agent` & governance enforcement and optional W3C trace tree rendering.
   - `airframe test <workflow> [--live|--mock] [-e engine]`: Executes testbed with `evaluate_expected_assertions()` + discovered workflow sensors (exits `1` on mismatch or missing `--live` keys).
   - `airframe compare <workflow> --baseline <modelA> --candidate <modelB> [--mock]`: Runs differential scorecard with explicit `DRY-RUN MOCK MODE` banner when offline.
+  - `airframe trace [target] [--dir path] [--json]`: Renders hierarchical W3C JSONL execution trace trees (defaults to latest trace in `.airframe/traces/` or accepts file path / trace ID prefix).
   - `airframe init workflow <name> [--light]`: Scaffolds multi-agent or single-file workflow packs.
 
 ---
@@ -216,8 +217,6 @@ airframe/
 │   ├── patch-verifier/               # Evaluator-Optimizer pack with AST safety verification
 │   └── code-auditor-swarm/           # Orchestrator-Workers pack with parallel tool delegation
 │
-├── examples/                         # Interactive quickstart walkthroughs (`showcase_walkthrough.py`)
-│
 ├── src/
 │   └── airframe/
 │       ├── adapters/                 # Swappable model engines (Gemini, Claude, OpenAI, Ollama)
@@ -233,7 +232,7 @@ airframe/
 │       ├── telemetry/                # Hierarchical JSONL AirframeTracer, scorecards, diff reports (FR-5, FR-14)
 │       ├── runner/                   # Canonical WorkflowRunner async engine (FR-10..FR-13)
 │       ├── workflows/                # WorkflowPack loader, scaffold, tool & sensor discovery (FR-15)
-│       └── cli.py                    # CLI (`airframe run`, `test`, `compare`, `init`)
+│       └── cli.py                    # CLI (`airframe run`, `test`, `compare`, `trace`, `init`)
 │
 ├── tests/
 │   ├── unit/                         # Unit tests for all core airframe modules & CLI

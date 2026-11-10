@@ -5,7 +5,7 @@
 $$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/tests-79%20offline%20passed-brightgreen.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-81%20offline%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -50,16 +50,24 @@ airframe info
 
 ### 3. 5-Minute Developer Showcase (0 API Keys Required)
 
-```bash
-# Run the concise 100-line Python quickstart (contracts, 3 topologies, guards, stall breaker, W3C trace tree):
-PYTHONPATH=src python3 examples/showcase_walkthrough.py
+Run every topology directly from the CLI and inspect live W3C execution span trees with `--trace` / `airframe trace` (see [docs/SHOWCASE.md](docs/SHOWCASE.md) for the full tour):
 
-# Or run the multi-agent showcase packs directly via CLI:
-airframe test workflows/patch-verifier --mock        # evaluator-optimizer + AST safety sensor
-airframe test workflows/code-auditor-swarm --mock    # orchestrator-workers + parallel tool delegation
+```bash
+# Evaluator-Optimizer loop + AST safety sensor + immediate trace tree:
+airframe run workflows/patch-verifier -i "Write solve(x: int) -> int" --mock --trace
+
+# Orchestrator-Workers swarm + parallel tool delegation + trace tree:
+airframe run workflows/code-auditor-swarm -i "Audit login.py for SQL injection" --mock --trace
+
+# Replay the latest hierarchical span tree anytime (or export JSON via --json):
+airframe trace
+
+# Verify semantic assertions & custom workflow sensors offline:
+airframe test workflows/patch-verifier --mock
+airframe test workflows/code-auditor-swarm --mock
 ```
 
-### 4. Run Automated Tests (79/79 Offline Passing)
+### 4. Run Automated Tests (81/81 Offline Passing)
 
 ```bash
 # Run deterministic offline unit and integration suite (zero external API keys required):
@@ -124,7 +132,7 @@ if __name__ == "__main__":
 | **Phase 3** | **Dual-Layer Isolation** | `AgentBlueprint` manifests, locked `WorktreeManager` with `SIGKILL`/`SIGINT`/`SIGTERM` compensation & `WorktreeConflictError`, `ContextPartitioner` (`fsync` + `.corrupt_tail` recovery) | ✅ **Completed** ([`test_blueprints.py`](tests/unit/test_blueprints.py), [`test_isolation.py`](tests/unit/test_isolation.py)) · Container mode (`workspace_mode="container"`) **Deferred (per [ADR 0001](docs/adr/0001-workflow-vs-container-isolation.md))** |
 | **Phase 4** | **Multi-Agent, IPC & Runner** | Async typed `EventBus`, `SupervisorAgent` with `RecursionLimiter`, `EvaluatorOptimizerLoop`, `WorkflowRunner` (`single-agent`, `orchestrator-workers`, `evaluator-optimizer`), `AirframeTracer` W3C JSONL trace trees | ✅ **Completed** ([`test_orchestration.py`](tests/unit/test_orchestration.py), [`test_telemetry_tracer.py`](tests/unit/test_telemetry_tracer.py), [`test_runtime_runner.py`](tests/integration/test_runtime_runner.py)) · `router` topology **Not Implemented** |
 | **Phase 5** | **Long-Horizon Shifts & Governance** | Crash-safe `DiskStateManager` (`atomic_write_text`, re-entrant `flock`, `.bak` recovery), `ShiftTurnoverEngine` with git checkpointing & history wipe, `BudgetTracker`, `StallDetector`, `HumanApprovalGate`, `max_turns` & `timeout_seconds` | ✅ **Completed** ([`test_long_horizon_and_governance.py`](tests/unit/test_long_horizon_and_governance.py), [`test_system_integration.py`](tests/integration/test_system_integration.py), [`test_runtime_runner.py`](tests/integration/test_runtime_runner.py)) |
-| **Phase 6** | **Workflow Packs & CLI Diff Engine**| `WorkflowPack` (`load_tools`, `load_sensors`, `entrypoint_agent`), `airframe run`/`test`/`compare`/`init`, semantic `expected` assertions & custom sensor gates, differential scorecard comparator | ✅ **Completed** ([`test_cli.py`](tests/unit/test_cli.py), [`test_workflows_and_diff.py`](tests/unit/test_workflows_and_diff.py), [`test_weather_forecaster.py`](tests/unit/test_weather_forecaster.py)) |
+| **Phase 6** | **Workflow Packs & CLI Diff Engine**| `WorkflowPack` (`load_tools`, `load_sensors`, `entrypoint_agent`), `airframe run`/`test`/`compare`/`trace`/`init`, semantic `expected` assertions & custom sensor gates, differential scorecard comparator | ✅ **Completed** ([`test_cli.py`](tests/unit/test_cli.py), [`test_workflows_and_diff.py`](tests/unit/test_workflows_and_diff.py), [`test_weather_forecaster.py`](tests/unit/test_weather_forecaster.py), [`test_showcase_workflows.py`](tests/unit/test_showcase_workflows.py)) |
 
 ---
 
@@ -160,8 +168,11 @@ workflows/<use-case-name>/
 # Execute a workflow end-to-end with real model adapter and contract validation
 airframe run workflows/calculator -i "Calculate compound interest on ₹10,000 at 5% for 3 years"
 
-# Execute in deterministic dry-run verification mode (no API key required)
-airframe run workflows/weather-forecaster -i "Will it rain in Bengaluru tomorrow at 3 PM?" --mock
+# Execute in deterministic dry-run verification mode and render hierarchical trace tree
+airframe run workflows/weather-forecaster -i "Will it rain in Bengaluru tomorrow at 3 PM?" --mock --trace
+
+# Inspect latest trace tree (or pass trace_id / file path / --json)
+airframe trace
 
 # Run local regression testbed
 airframe test workflows/pr-reviewer
@@ -190,14 +201,11 @@ airframe/
 ├── REQUIREMENTS.md                   # Complete architectural requirements (FR-1 to FR-15)
 ├── pyproject.toml                    # Package metadata and dependencies
 ├── docs/
-│   ├── SHOWCASE.md                   # 5-minute developer quickstart & 5-act showcase guide
+│   ├── SHOWCASE.md                   # 5-minute developer quickstart & CLI showcase guide
 │   ├── EXTENDING.md                  # Plug-in guide: adapters, sensors, tools, workspaces, topologies
 │   ├── WRITING_WORKFLOWS.md          # Step-by-step Workflow Pack authoring handbook
 │   ├── adr/                          # Architecture Decision Records (ADR 0001)
 │   └── specs/                        # Remediation & architecture specifications
-│
-├── examples/
-│   └── showcase_walkthrough.py       # One-command deterministic 5-act showcase script
 │
 ├── src/
 │   └── airframe/
@@ -214,7 +222,7 @@ airframe/
 │       ├── runner/                   # Canonical `WorkflowRunner` & ReAct loop runtime (FR-10..FR-13)
 │       ├── telemetry/                # Hierarchical JSONL `AirframeTracer`, scorecards, diff reports (FR-14)
 │       ├── workflows/                # WorkflowPack manifest, tool & sensor loader (FR-15)
-│       └── cli.py                    # CLI (`airframe run`, `test`, `compare`, `init`)
+│       └── cli.py                    # CLI (`airframe run`, `test`, `compare`, `trace`, `init`)
 │
 ├── tests/
 │   ├── unit/                         # Deterministic unit suites (`test_adapters.py`, `test_cli.py`, `test_isolation.py`, `test_tools.py`, `test_telemetry_tracer.py`, etc.)
@@ -227,7 +235,7 @@ airframe/
 
 ## Detailed Specifications & Planning
 
-* **[docs/SHOWCASE.md](docs/SHOWCASE.md)**: 5-minute developer quickstart and interactive 5-act showcase guide.
+* **[docs/SHOWCASE.md](docs/SHOWCASE.md)**: 5-minute developer quickstart and CLI workflow showcase guide.
 * **[docs/EXTENDING.md](docs/EXTENDING.md)**: Complete guide to extending adapters, tools, sensors, workspaces, topologies, and traces.
 * **[docs/WRITING_WORKFLOWS.md](docs/WRITING_WORKFLOWS.md)**: Step-by-step guide to creating `--light` and multi-agent Workflow Packs.
 * **[INSTALLATION.md](INSTALLATION.md)**: Full setup instructions and model provider credentials guide.

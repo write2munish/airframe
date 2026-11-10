@@ -165,7 +165,7 @@ class MigrationSafetySensor(Sensor):
     keyword: "concurrently"
 ```
 
-Supported assertion rules in [`evaluate_expected_assertions`](../src/airframe/cli.py#L276-L340):
+Supported assertion rules in [`evaluate_expected_assertions`](../src/airframe/cli.py#L285-L350):
 * **Numbers:** Float tolerance `±1e-2`.
 * **Booleans / Strings / Nested Dicts:** Exact type-safe match (`bool` checked separately from `int`).
 * **`keyword`:** Case-insensitive substring check flattened across the entire output payload.
@@ -174,8 +174,8 @@ Supported assertion rules in [`evaluate_expected_assertions`](../src/airframe/cl
 ### Step 7 — Run, Verify, and Benchmark Engine Swaps
 
 ```bash
-# 1. Dry-run structure, tool binding, contracts, and sensors offline
-airframe run workflows/sql-migrator -i "CREATE INDEX idx_a ON t(a);" --mock
+# 1. Dry-run structure, tool binding, contracts, sensors, and W3C trace tree offline
+airframe run workflows/sql-migrator -i "CREATE INDEX idx_a ON t(a);" --mock --trace
 
 # 2. Validate against real LLM endpoint (--live enforces API key presence)
 export GEMINI_API_KEY="..."
@@ -187,4 +187,4 @@ airframe compare workflows/sql-migrator \
   --candidate claude-3-5-sonnet
 ```
 
-After running, inspect `.airframe/traces/<trace_id>.jsonl` with `load_trace()` + `build_trace_tree()` to audit turn count, tool timings, and sensor verdicts.
+After any run, inspect the latest `.airframe/traces/<trace_id>.jsonl` tree via `airframe trace` (or `airframe trace --json`) to audit turn count, tool timings, and sensor verdicts.

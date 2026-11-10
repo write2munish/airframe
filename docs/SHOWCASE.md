@@ -1,44 +1,19 @@
 # ⚡ Airframe 5-Minute Developer Quickstart & Showcase
 
-Run every capability in **Airframe** end-to-end in under 5 minutes—zero API keys required by default, with one-flag promotion to live Gemini, Claude, OpenAI, or Ollama engines.
+Run every capability in **Airframe** directly from the CLI in under 5 minutes—zero API keys required by default, with one-flag promotion to live Gemini, Claude, OpenAI, or Ollama engines.
+
+If you installed Airframe editable (`pip install -e ".[dev]"`), run `airframe ...` directly (substitute `PYTHONPATH=src python3 -m airframe.cli ...` if running uninstalled).
 
 ---
 
-## Option 1: One-Command Python Quickstart (~100 Lines, Zero API Keys)
+## 1. Run Single-Agent & Multi-Agent Topologies (With `--trace`)
 
-Run [`examples/showcase_walkthrough.py`](../examples/showcase_walkthrough.py) to watch Airframe's core engine, multi-topology runner, governance breakers, disk state, and trace trees run end-to-end in under 1 second:
-
-```bash
-PYTHONPATH=src python3 examples/showcase_walkthrough.py
-```
-
-What this demonstrates in 4 concise steps:
-1. **Engine Swap + Executable Contracts:** Resolves `gemini`, `anthropic`, `openai`, and `ollama` behind one interface and runs `invoke_contract` against a Pydantic model.
-2. **Same Runner Across All 3 Topologies:** Runs [`workflows/basic-calculator`](../workflows/basic-calculator/workflow.yaml) (`single-agent`), [`workflows/patch-verifier`](../workflows/patch-verifier/workflow.yaml) (`evaluator-optimizer`), and [`workflows/code-auditor-swarm`](../workflows/code-auditor-swarm/workflow.yaml) (`orchestrator-workers`) with their auto-discovered `sensors.py`.
-3. **Guards, Breakers & Externalized State:** Shows `ExecutableGuard` rejecting malformed JSON, `StallDetector` halting 3 repeated failures, and `DiskStateManager` atomically persisting `task_queue.json`.
-4. **W3C Trace Tree Replay:** Reconstructs and prints the parent-child span hierarchy from `.airframe/traces/<trace_id>.jsonl` using `load_trace()` and `build_trace_tree()`.
-
-> **Deep-Dive Crash-Durability & Worktree Proofs:** Real `SIGKILL` (`-9`) worktree orphan reaping, live-sibling `WorktreeConflictError`, truncated `transcript.jsonl` recovery, and 4-turn `ShiftTurnoverEngine` git checkpointing are verified automatically in [`tests/unit/test_isolation.py`](../tests/unit/test_isolation.py) and [`tests/integration/test_runtime_runner.py`](../tests/integration/test_runtime_runner.py).
-
-To run the walkthrough against a real LLM provider instead:
-
-```bash
-export GEMINI_API_KEY="your-key"
-PYTHONPATH=src python3 examples/showcase_walkthrough.py --live gemini-2.0-flash
-```
-
----
-
-## Option 2: 5-Minute CLI Showcase Tour
-
-If you installed Airframe editable (`pip install -e ".[dev]"`), run these CLI commands in sequence (substitute `PYTHONPATH=src python3 -m airframe.cli` if running uninstalled):
-
-### 1. Run Single-Agent & Multi-Agent Topologies (Offline Dry-Run)
+Execute workflows across all three Airframe topologies and pass `--trace` (`-t`) to inspect the live W3C execution span hierarchy immediately after completion:
 
 ```bash
 # Single-agent ReAct calculator pack (--light structure)
 airframe run workflows/basic-calculator \
-  -i "Calculate compound interest on ₹10,000 at 5% for 3 years" --mock
+  -i "Calculate compound interest on ₹10,000 at 5% for 3 years" --mock --trace
 
 # Context-pruned geospatial weather pack
 airframe run workflows/weather-forecaster \
@@ -46,14 +21,41 @@ airframe run workflows/weather-forecaster \
 
 # Evaluator-Optimizer code verification loop (AST + safety sensors)
 airframe run workflows/patch-verifier \
-  -i "Write a pure Python helper solve(x: int) -> int" --mock
+  -i "Write a pure Python helper solve(x: int) -> int" --mock --trace
 
 # Orchestrator-Workers swarm (selects entrypoint_agent 'audit-lead' over worker)
 airframe run workflows/code-auditor-swarm \
-  -i "Audit login.py for SQL injection or eval usage" --mock
+  -i "Audit login.py for SQL injection or eval usage" --mock --trace
 ```
 
-### 2. Verify Semantic Assertions & Custom Sensors
+To promote any run to a real LLM provider, omit `--mock` and provide credentials (or target a local Ollama model):
+
+```bash
+export GEMINI_API_KEY="your-key"
+airframe run workflows/code-auditor-swarm \
+  -i "Audit login.py for SQL injection" -e gemini-2.0-flash --trace
+```
+
+---
+
+## 2. Inspect Hierarchical Execution Traces (`airframe trace`)
+
+Every `WorkflowRunner` run streams W3C-compatible spans line-by-line (with `fsync`) to `.airframe/traces/<trace_id>.jsonl`. Replay and render the span tree (`Root -> Supervisor -> Worker -> Model -> Tool -> Sensor`) anytime:
+
+```bash
+# Render the most recent trace tree from .airframe/traces/
+airframe trace
+
+# Inspect a specific trace by file path, full trace_id, or ID prefix
+airframe trace <trace_id_or_prefix>
+
+# Export reconstructed parent-child tree JSON (for scripts or CI dashboards)
+airframe trace --json
+```
+
+---
+
+## 3. Verify Semantic Assertions & Custom Sensors (`airframe test`)
 
 `airframe test` evaluates `expected` / `expected_output` fields (`±1e-2` float tolerance, exact booleans/strings, `severity`, `keyword`) and runs auto-discovered `sensors.py`:
 
@@ -65,7 +67,9 @@ airframe test workflows/code-auditor-swarm --mock
 
 > **Note on `workflows/calculator`:** Its second benchmark case (`₹50,000` quarterly compounding) checks non-hardcoded live math via [`CompoundInterestMathSensor`](../workflows/calculator/sensors.py), so validate it using `--live` with an API key or `ollama/...`.
 
-### 3. Benchmark an Engine Swap Without Code Changes
+---
+
+## 4. Benchmark an Engine Swap Without Code Changes (`airframe compare`)
 
 ```bash
 airframe compare workflows/pr-reviewer \
@@ -88,6 +92,8 @@ When API keys are unset (or `--mock` is passed), `compare` clearly prints `DRY-R
 | [`workflows/calculator`](../workflows/calculator/workflow.yaml) | `single-agent` | Custom [`CompoundInterestMathSensor`](../workflows/calculator/sensors.py) verifying math independently |
 | [`workflows/patch-verifier`](../workflows/patch-verifier/workflow.yaml) | `evaluator-optimizer` | Iterative critique loop paired with `SafePythonPatchSensor` AST checks |
 | [`workflows/code-auditor-swarm`](../workflows/code-auditor-swarm/workflow.yaml) | `orchestrator-workers` | Multi-blueprint planning, `entrypoint_agent` resolution, parallel tool workers |
+
+> **Deep-Dive Crash-Durability & Worktree Proofs:** Real `SIGKILL` (`-9`) worktree orphan reaping, live-sibling `WorktreeConflictError`, truncated `transcript.jsonl` recovery, `StallDetector`, and 4-turn `ShiftTurnoverEngine` git checkpointing are verified in [`tests/unit/test_isolation.py`](../tests/unit/test_isolation.py), [`tests/unit/test_long_horizon_and_governance.py`](../tests/unit/test_long_horizon_and_governance.py), and [`tests/integration/test_runtime_runner.py`](../tests/integration/test_runtime_runner.py).
 
 ---
 

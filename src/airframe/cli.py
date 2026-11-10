@@ -13,9 +13,11 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.tree import Tree as RichTree
 import typer
 import yaml
 
@@ -34,7 +36,14 @@ from airframe.runner import (
     WorkflowRunner,
     load_contract_schema,
 )
-from airframe.telemetry.diff import CaseResult, RunScorecard, compare_scorecards
+from airframe.telemetry import (
+    AirframeTracer,
+    CaseResult,
+    RunScorecard,
+    build_trace_tree,
+    compare_scorecards,
+    load_trace,
+)
 from airframe.workflows.loader import (
     WorkflowPack,
     init_workflow_scaffold,
@@ -662,14 +671,166 @@ def compare_cmd(
         raise typer.Exit(code=1)
 
 
+_SPAN_KIND_STYLES = {
+    "root": "bold cyan",
+    "supervisor": "bold magenta",
+    "worker": "bold blue",
+    "model": "yellow",
+    "tool": "cyan",
+    "sensor": "green",
+}
+_DISPLAY_ATTR_KEYS = (
+    "topology",
+    "entrypoint",
+    "workspace_mode",
+    "model",
+    "contract",
+    "blueprint",
+    "turn",
+    "subtask_count",
+    "success",
+)
+
+
+def _resolve_trace_file(trace_target: str | None, trace_dir: str | Path) -> Path:
+    """Resolve an explicit path, trace_id, ID prefix, or default latest trace file."""
+    base_dir = Path(trace_dir)
+    if not trace_target:
+        if not base_dir.is_dir():
+            raise FileNotFoundError(
+                f"Trace directory '{base_dir}' does not exist. Run a workflow first with 'airframe run ...'."
+            )
+        candidates = [p for p in base_dir.glob("*.jsonl") if p.is_file()]
+        if not candidates:
+            raise FileNotFoundError(
+                f"No trace files found in '{base_dir}'. Run a workflow first with 'airframe run ...'."
+            )
+        return max(candidates, key=lambda p: (p.stat().st_mtime_ns, p.name))
+
+    direct = Path(trace_target)
+    if direct.is_file():
+        return direct
+
+    for candidate in (base_dir / trace_target, base_dir / f"{trace_target}.jsonl"):
+        if candidate.is_file():
+            return candidate
+
+    if base_dir.is_dir():
+        matches = [p for p in sorted(base_dir.glob("*.jsonl")) if p.is_file() and p.stem.startswith(trace_target)]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            matched_ids = ", ".join(p.stem for p in matches[:5])
+            raise ValueError(f"Ambiguous trace ID prefix '{trace_target}': matched {matched_ids}")
+
+    raise FileNotFoundError(
+        f"Trace file or ID '{trace_target}' not found (checked '{direct}' and '{base_dir}')."
+    )
+
+
+def _format_span_label(node: dict[str, Any]) -> str:
+    """Format a reconstructed trace span node into a readable Rich tree node label."""
+    name = escape(str(node.get("name", "span")))
+    kind = str(node.get("kind", "root"))
+    kind_esc = escape(kind)
+    kind_style = _SPAN_KIND_STYLES.get(kind, "white")
+    status = str(node.get("status", "OK"))
+    status_esc = escape(status)
+    status_style = "green" if status == "OK" else "bold red"
+    dur_ms = max(0.0, (int(node.get("end_ns", 0)) - int(node.get("start_ns", 0))) / 1_000_000.0)
+
+    attrs = node.get("attributes") or {}
+    attr_parts: list[str] = []
+    for key in _DISPLAY_ATTR_KEYS:
+        if key in attrs and attrs[key] is not None and attrs[key] != "":
+            val_str = str(attrs[key])
+            if len(val_str) > 40:
+                val_str = val_str[:37] + "..."
+            attr_parts.append(f"{key}={escape(val_str)}")
+
+    label = (
+        f"[bold]{name}[/bold] [{kind_style}]({kind_esc})[/{kind_style}] "
+        f"[{status_style}]{status_esc}[/{status_style}] [dim]{dur_ms:.1f}ms[/dim]"
+    )
+    if attr_parts:
+        label += f" [dim]· {', '.join(attr_parts)}[/dim]"
+    if node.get("error"):
+        label += f" [red]— {escape(str(node['error']))}[/red]"
+    return label
+
+
+def _render_trace_tree(trace_path: Path, *, as_json: bool = False) -> None:
+    """Load a W3C JSONL trace file and render either JSON or a hierarchical Rich tree."""
+    spans = load_trace(trace_path)
+    if not spans:
+        raise ValueError(f"Trace file '{trace_path}' is empty or contains no valid spans.")
+
+    tree_data = build_trace_tree(spans)
+    if as_json:
+        typer.echo(json.dumps(tree_data, indent=2))
+        return
+
+    console.print(
+        f"[bold cyan]Trace Tree[/bold cyan] [green]{escape(str(tree_data['trace_id']))}[/green] "
+        f"[dim]({tree_data['span_count']} spans · {escape(str(trace_path))})[/dim]"
+    )
+
+    def _attach(branch: RichTree, child_node: dict[str, Any]) -> None:
+        sub = branch.add(_format_span_label(child_node))
+        for grand in child_node.get("children", []):
+            _attach(sub, grand)
+
+    for root_node in tree_data["roots"]:
+        rich_tree = RichTree(_format_span_label(root_node))
+        for child in root_node.get("children", []):
+            _attach(rich_tree, child)
+        console.print(rich_tree)
+
+
+@app.command("trace")
+def trace_cmd(
+    trace_target: Optional[str] = typer.Argument(
+        None,
+        help="Trace file path, trace_id, or ID prefix. Defaults to most recent trace in --dir.",
+    ),
+    trace_dir: str = typer.Option(
+        ".airframe/traces",
+        "--dir",
+        "-d",
+        help="Directory searched when trace_target is omitted or given as an ID.",
+    ),
+    as_json: bool = typer.Option(
+        False,
+        "--json",
+        help="Print the reconstructed trace tree as formatted JSON.",
+    ),
+) -> None:
+    """Inspect and render hierarchical W3C JSONL execution trace trees."""
+    try:
+        trace_path = _resolve_trace_file(trace_target, trace_dir)
+        _render_trace_tree(trace_path, as_json=as_json)
+    except typer.Exit:
+        raise
+    except Exception as err:
+        console.print(f"[bold red]Error loading trace:[/bold red] {err}")
+        raise typer.Exit(code=1)
+
+
 @app.command("run")
 def run_cmd(
     workflow_path: str = typer.Argument(..., help="Path to workflow directory or workflow.yaml."),
     input_query: str = typer.Option("", "--input", "-i", help="Input query payload."),
     engine: Optional[str] = typer.Option(None, "--engine", "-e", help="Override engine binding."),
     mock: bool = typer.Option(False, "--mock", help="Run with deterministic mock engine (no API calls)."),
+    show_trace: bool = typer.Option(
+        False,
+        "--trace",
+        "-t",
+        help="Render the hierarchical W3C execution trace tree after execution.",
+    ),
 ) -> None:
     """Execute a workflow pack end-to-end via WorkflowRunner with full governance and telemetry."""
+    active_tracer: AirframeTracer | None = None
     try:
         pack = load_workflow(workflow_path)
         blueprints = pack.load_blueprints()
@@ -713,7 +874,8 @@ def run_cmd(
         tool_registry = pack.load_tools()
         sensors = pack.load_sensors()
 
-        workflow_runner = WorkflowRunner()
+        active_tracer = AirframeTracer() if show_trace else None
+        workflow_runner = WorkflowRunner(tracer=active_tracer)
         run_result = asyncio.run(
             workflow_runner.run(
                 pack,
@@ -754,6 +916,10 @@ def run_cmd(
             telemetry_table.add_row("Trace File", run_result.trace_file)
         console.print(telemetry_table)
 
+        if show_trace and run_result.trace_file:
+            console.print("")
+            _render_trace_tree(Path(run_result.trace_file))
+
         failed_sensors = [r for r in run_result.sensor_results if not r.passed]
         if failed_sensors:
             if is_mock:
@@ -780,6 +946,10 @@ def run_cmd(
             )
         else:
             console.print(f"[bold red]Error executing workflow:[/bold red] {err_msg}")
+        if show_trace and active_tracer is not None and active_tracer.trace_file.is_file():
+            if load_trace(active_tracer.trace_file):
+                console.print("")
+                _render_trace_tree(active_tracer.trace_file)
         raise typer.Exit(code=1)
 
 

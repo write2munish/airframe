@@ -182,6 +182,13 @@ class DockerWorkspace(WorkspaceStrategy):
 
 Every `WorkflowRunner` execution writes W3C-compatible spans line-by-line (with `fsync`) to `.airframe/traces/<trace_id>.jsonl`.
 
+Inspect traces directly from the terminal with the CLI, or load them programmatically:
+
+```bash
+airframe trace                 # Latest trace tree
+airframe trace --json          # Structured JSON tree for CI tooling
+```
+
 ```python
 from airframe.telemetry import load_trace, build_trace_tree
 

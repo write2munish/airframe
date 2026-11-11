@@ -198,3 +198,18 @@ tree = build_trace_tree(spans)  # {"trace_id": ..., "span_count": ..., "roots": 
 
 * **OpenTelemetry Mirroring:** Installing `opentelemetry-api` (with your configured OTLP SDK exporter) causes [`AirframeTracer`](../src/airframe/telemetry/tracer.py#L46-L52) to mirror every span start/end event automatically without changing any workflow code.
 * **Custom Scorecards:** Feed `CaseResult` lists into `RunScorecard.from_results()` and `compare_scorecards()` in [`src/airframe/telemetry/diff.py`](../src/airframe/telemetry/diff.py) to gate CI deployments programmatically.
+
+---
+
+## 7. Building Safe Self-Improving Loops
+
+Naive self-modifying agents fail from **self-evaluation bias** and **prompt drift** (fixing one bug while silently regressing earlier behavior). Airframe enforces a safe evolutionary loop across 4 levels:
+
+1. **Intra-Task Self-Repair:** `ExecutableGuard` / `invoke_contract(max_retries=2)` feeds schema errors back immediately.
+2. **Playbook Memory:** Agents update concise `guides/*.md` playbooks bounded by `ContextBudgeter` (`< 4000` tokens).
+3. **Differential Regression Gating:** Any candidate playbook/blueprint must satisfy:
+   $$\text{PassRate}_{\text{candidate}} > \text{PassRate}_{\text{baseline}} \quad \text{and} \quad |\text{diff.regressions}| = 0$$
+   measured by [`compare_scorecards`](../src/airframe/telemetry/diff.py#L135-L163) against objective sensors and a golden `testbed.yaml`.
+4. **Sandboxed Tool Synthesis:** Candidate Python tools execute inside `SandboxWorkspace` / `WorktreeWorkspace` before registration.
+
+See the complete runnable implementation in [`workflows/java-jwt-triage/evolve.py`](../workflows/java-jwt-triage/evolve.py), which demonstrates Baseline (`3/6`) -> Over-broad Candidate (`4/6`, **REJECTED** due to `-2` regressions) -> Scoped Playbook (`6/6`, **PROMOTED**, `0` regressions) on closed `auth0/java-jwt` issues.

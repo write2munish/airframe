@@ -1,0 +1,20 @@
+id: "java-jwt-triage"
+version: "1.0.0"
+description: "Self-improving bug triage workflow grounded on real closed issues and root-cause commits from auth0/java-jwt."
+topology: "single-agent"
+workspace_mode: "inherit"
+entrypoint_agent: "bug-triager"
+engine_binding: "gemini-2.0-flash"
+tools:
+  - "list_subsystems"
+  - "inspect_java_jwt_package"
+
+system_prompt: "guides/triage_playbook.md"
+
+governance:
+  max_turns: 4
+  timeout_seconds: 60
+  stall_threshold: 2
+  max_cost_usd: 0.10
+
+testbed: "testbed.yaml"

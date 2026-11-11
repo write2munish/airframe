@@ -5,7 +5,7 @@
 $$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/tests-81%20offline%20passed-brightgreen.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-86%20offline%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -30,15 +30,20 @@ In aerospace engineering, an **airframe** is the complete structural aircraft—
 
 ## ⚡ Installation & Quickstart
 
-See the full [**Installation Guide (INSTALLATION.md)**](INSTALLATION.md) for detailed environment and provider setup.
-
-### 1. Install via Pip
+### 1. Install (Python 3.10+ & Git)
 
 ```bash
-# Clone and install in editable mode with development dependencies:
 git clone https://github.com/write2munish/airframe.git
 cd airframe
-pip install -e ".[dev]"
+pip install -e ".[dev]"   # or: uv pip install -e ".[dev]"
+```
+
+Set credentials only for the cloud provider(s) you plan to run live (local Ollama works out of the box at `http://localhost:11434/v1` with zero API keys):
+
+```bash
+export GEMINI_API_KEY="..."      # Google Gemini
+export ANTHROPIC_API_KEY="..."   # Anthropic Claude
+export OPENAI_API_KEY="..."      # OpenAI
 ```
 
 ### 2. Verify CLI
@@ -65,9 +70,12 @@ airframe trace
 # Verify semantic assertions & custom workflow sensors offline:
 airframe test workflows/patch-verifier --mock
 airframe test workflows/code-auditor-swarm --mock
+
+# Measure regression-gated playbook self-improvement on 6 real auth0/java-jwt bugs:
+python3 workflows/java-jwt-triage/evolve.py
 ```
 
-### 4. Run Automated Tests (81/81 Offline Passing)
+### 4. Run Automated Tests (86/86 Offline Passing)
 
 ```bash
 # Run deterministic offline unit and integration suite (zero external API keys required):
@@ -195,17 +203,14 @@ airframe init workflow customer-support
 
 ```
 airframe/
-├── INSTALLATION.md                   # Installation & provider configuration guide
-├── IMPLEMENTATION_PLAN.md            # 6-phase engineering roadmap & verification matrix
 ├── README.md                         # Project overview and quickstart
-├── REQUIREMENTS.md                   # Complete architectural requirements (FR-1 to FR-15)
 ├── pyproject.toml                    # Package metadata and dependencies
 ├── docs/
 │   ├── SHOWCASE.md                   # 5-minute developer quickstart & CLI showcase guide
-│   ├── EXTENDING.md                  # Plug-in guide: adapters, sensors, tools, workspaces, topologies
 │   ├── WRITING_WORKFLOWS.md          # Step-by-step Workflow Pack authoring handbook
-│   ├── adr/                          # Architecture Decision Records (ADR 0001)
-│   └── specs/                        # Remediation & architecture specifications
+│   ├── EXTENDING.md                  # Plug-in guide: adapters, sensors, tools, workspaces, self-improvement
+│   ├── ARCHITECTURE.md               # Architectural principles, FR-1..FR-15 verification matrix, NFRs
+│   └── adr/                          # Architecture Decision Records (ADR 0001)
 │
 ├── src/
 │   └── airframe/
@@ -228,18 +233,15 @@ airframe/
 │   ├── unit/                         # Deterministic unit suites (`test_adapters.py`, `test_cli.py`, `test_isolation.py`, `test_tools.py`, `test_telemetry_tracer.py`, etc.)
 │   ├── integration/                  # End-to-end runtime, worktree crash recovery & governance suites (`test_system_integration.py`, `test_runtime_runner.py`)
 │   └── live/                         # Opt-in live vendor HTTP smoke tests (`AIRFRAME_LIVE_TESTS=1`)
-└── workflows/                        # Self-contained packs (`pr-reviewer`, `basic-calculator`, `calculator`, `weather-forecaster`, `patch-verifier`, `code-auditor-swarm`)
+└── workflows/                        # Self-contained packs (`pr-reviewer`, `basic-calculator`, `calculator`, `weather-forecaster`, `java-jwt-triage`, `patch-verifier`, `code-auditor-swarm`)
 ```
 
 ---
 
-## Detailed Specifications & Planning
+## Documentation
 
 * **[docs/SHOWCASE.md](docs/SHOWCASE.md)**: 5-minute developer quickstart and CLI workflow showcase guide.
-* **[docs/EXTENDING.md](docs/EXTENDING.md)**: Complete guide to extending adapters, tools, sensors, workspaces, topologies, and traces.
 * **[docs/WRITING_WORKFLOWS.md](docs/WRITING_WORKFLOWS.md)**: Step-by-step guide to creating `--light` and multi-agent Workflow Packs.
-* **[INSTALLATION.md](INSTALLATION.md)**: Full setup instructions and model provider credentials guide.
-* **[REQUIREMENTS.md](REQUIREMENTS.md)**: Full functional requirements (FR-1 through FR-15) and non-functional requirements (NFR-1 through NFR-5).
-* **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)**: 6-phase engineering roadmap, milestone deliverables, and critical path.
-* **[SELF_IMPROVING_AGENTS.md](SELF_IMPROVING_AGENTS.md)**: Architectural guide and code patterns for building safe, verified self-improving agents.
+* **[docs/EXTENDING.md](docs/EXTENDING.md)**: Guide to extending adapters, tools, sensors, workspaces, topologies, traces, and self-improving loops.
+* **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**: Core architectural principles, FR-1..FR-15 verification matrix, and NFRs.
 * **[docs/adr/0001-workflow-vs-container-isolation.md](docs/adr/0001-workflow-vs-container-isolation.md)**: ADR 0001: Workflow-Level Isolation vs. Container-Based Isolation.

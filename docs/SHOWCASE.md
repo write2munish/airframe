@@ -82,6 +82,25 @@ When API keys are unset (or `--mock` is passed), `compare` clearly prints `DRY-R
 
 ---
 
+## 5. Self-Improving Playbook Evolution (`workflows/java-jwt-triage`)
+
+Demonstrates measurable cross-task learning on **6 real closed issues and verified root-cause commits from `auth0/java-jwt`** (`#652`, `#679`, `#579`, `#706`/`#774`, `#663`, `#606`) without prompt drift or hallucinations:
+
+```bash
+# Deterministic offline simulation (0 API keys, replays playbook rules through WorkflowRunner + sensors + compare_scorecards)
+python3 workflows/java-jwt-triage/evolve.py
+
+# Persist promoted playbook (--apply), reset to Day-1 baseline (--reset), or run against live LLM (--live):
+python3 workflows/java-jwt-triage/evolve.py --live -e gemini-2.0-flash --apply
+```
+
+Measured progression:
+- **Epoch 0 (`v0-baseline`):** `3/6 (50%)` — generic heuristics pass straightforward verifier/crypto bugs (`#652`, `#679`, `#579`) and misroute `PayloadDeserializer` / `TokenUtils` root causes.
+- **Epoch 1 (`v1-overbroad`):** `4/6 (67%)` -> **REJECTED (`-2` regressions)** — naive rule fixes `#706`/`#663` but breaks baseline `#652` and `#679`; `compare_scorecards()` blocks promotion.
+- **Epoch 2 (`v2-refined`):** `6/6 (100%)` -> **PROMOTED (`+3` fixed, `0` regressions)** — scopes JSON deserialization (`PayloadDeserializer`), token splitting (`TokenUtils`), and claim assertions (`JWTVerifier`).
+
+---
+
 ## Showcase Workflow Matrix
 
 | Workflow Pack | Topology | Key Airframe Feature Highlighted |
@@ -90,6 +109,7 @@ When API keys are unset (or `--mock` is passed), `compare` clearly prints `DRY-R
 | [`workflows/weather-forecaster`](../workflows/weather-forecaster/workflow.yaml) | `single-agent` | Async `httpx` payload pruning, `CoordinateAccuracySensor`, `ToolSequenceSensor` |
 | [`workflows/pr-reviewer`](../workflows/pr-reviewer/workflow.yaml) | `single-agent` | Blueprints, guides, `CodeReviewReport` contract, `severity`/`keyword` assertions |
 | [`workflows/calculator`](../workflows/calculator/workflow.yaml) | `single-agent` | Custom [`CompoundInterestMathSensor`](../workflows/calculator/sensors.py) verifying math independently |
+| [`workflows/java-jwt-triage`](../workflows/java-jwt-triage/workflow.yaml) | `single-agent` | Real `auth0/java-jwt` closed-issue testbed, `RealJavaJwtPathSensor`, [`evolve.py`](../workflows/java-jwt-triage/evolve.py) regression-gated playbook evolution |
 | [`workflows/patch-verifier`](../workflows/patch-verifier/workflow.yaml) | `evaluator-optimizer` | Iterative critique loop paired with `SafePythonPatchSensor` AST checks |
 | [`workflows/code-auditor-swarm`](../workflows/code-auditor-swarm/workflow.yaml) | `orchestrator-workers` | Multi-blueprint planning, `entrypoint_agent` resolution, parallel tool workers |
 

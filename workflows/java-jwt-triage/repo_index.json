@@ -1,0 +1,198 @@
+{
+  "repository": "https://github.com/auth0/java-jwt",
+  "tag": "4.6.2",
+  "files": {
+    "lib/src/main/java/module-info.java": {
+      "subsystem": "core-token",
+      "role": "Java module descriptor exporting com.auth0.jwt public packages."
+    },
+    "lib/src/main/java/com/auth0/jwt/HeaderParams.java": {
+      "subsystem": "core-token",
+      "role": "Standard JWT header parameter name constants (alg, typ, cty, kid)."
+    },
+    "lib/src/main/java/com/auth0/jwt/JWT.java": {
+      "subsystem": "core-token",
+      "role": "Public entry point delegating create(), decode(), and require() verification builders."
+    },
+    "lib/src/main/java/com/auth0/jwt/JWTCreator.java": {
+      "subsystem": "core-creator",
+      "role": "Builder and serializer that builds header/payload JSON and signs tokens."
+    },
+    "lib/src/main/java/com/auth0/jwt/JWTDecoder.java": {
+      "subsystem": "core-token",
+      "role": "Base64URL-decodes token segments and delegates JSON parsing to JWTParser."
+    },
+    "lib/src/main/java/com/auth0/jwt/JWTVerifier.java": {
+      "subsystem": "core-verifier",
+      "role": "Verifies cryptographic signatures and evaluates exp/nbf/iat/aud/iss claim assertions."
+    },
+    "lib/src/main/java/com/auth0/jwt/RegisteredClaims.java": {
+      "subsystem": "core-token",
+      "role": "Standard RFC 7519 registered payload claim constants (iss, sub, aud, exp, nbf, iat, jti)."
+    },
+    "lib/src/main/java/com/auth0/jwt/TokenUtils.java": {
+      "subsystem": "core-token",
+      "role": "Splits raw JWT strings into 3 dot-separated segments before Base64 decoding."
+    },
+    "lib/src/main/java/com/auth0/jwt/algorithms/Algorithm.java": {
+      "subsystem": "algorithms",
+      "role": "Abstract factory and base API for JWS signing and verification algorithms."
+    },
+    "lib/src/main/java/com/auth0/jwt/algorithms/CryptoHelper.java": {
+      "subsystem": "algorithms",
+      "role": "Low-level JCA Signature and Mac wrapper for byte-level verification/signing."
+    },
+    "lib/src/main/java/com/auth0/jwt/algorithms/ECDSAAlgorithm.java": {
+      "subsystem": "algorithms",
+      "role": "ECDSA (ES256/384/512) verification, DER<->JOSE conversion, and zero-signature guards."
+    },
+    "lib/src/main/java/com/auth0/jwt/algorithms/HMACAlgorithm.java": {
+      "subsystem": "algorithms",
+      "role": "HMAC (HS256/384/512) symmetric MAC signing and constant-time verification."
+    },
+    "lib/src/main/java/com/auth0/jwt/algorithms/NoneAlgorithm.java": {
+      "subsystem": "algorithms",
+      "role": "Unsecured alg=none implementation rejecting non-empty signatures."
+    },
+    "lib/src/main/java/com/auth0/jwt/algorithms/RSAAlgorithm.java": {
+      "subsystem": "algorithms",
+      "role": "RSA PKCS#1 v1.5 and PSS (RS256/PS256 etc.) signing and signature verification."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/AlgorithmMismatchException.java": {
+      "subsystem": "exceptions",
+      "role": "Exception thrown when token alg header disagrees with configured Algorithm."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/IncorrectClaimException.java": {
+      "subsystem": "exceptions",
+      "role": "Exception thrown when a present claim value fails verifier comparison."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/InvalidClaimException.java": {
+      "subsystem": "exceptions",
+      "role": "Base exception for failed claim verification checks."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/JWTCreationException.java": {
+      "subsystem": "exceptions",
+      "role": "Exception thrown when header/payload JSON serialization or signing fails."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/JWTDecodeException.java": {
+      "subsystem": "exceptions",
+      "role": "Exception thrown when token format, Base64, or JSON parsing is invalid."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/JWTVerificationException.java": {
+      "subsystem": "exceptions",
+      "role": "Root runtime exception for token verification failures."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/MissingClaimException.java": {
+      "subsystem": "exceptions",
+      "role": "Exception thrown when a required claim is absent from the JWT payload."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/SignatureGenerationException.java": {
+      "subsystem": "exceptions",
+      "role": "Exception thrown when generating a cryptographic signature fails."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/SignatureVerificationException.java": {
+      "subsystem": "exceptions",
+      "role": "Exception thrown when cryptographic signature validation fails."
+    },
+    "lib/src/main/java/com/auth0/jwt/exceptions/TokenExpiredException.java": {
+      "subsystem": "exceptions",
+      "role": "Exception thrown when a token's exp timestamp is at or before verification time."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/BasicHeader.java": {
+      "subsystem": "impl-codec",
+      "role": "Immutable Header POJO backed by Jackson JsonNode map."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/ClaimsHolder.java": {
+      "subsystem": "impl-codec",
+      "role": "Base holder wrapping claim maps during token creation serialization."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/ClaimsSerializer.java": {
+      "subsystem": "impl-codec",
+      "role": "Shared Jackson serializer formatting dates and custom claims into JSON."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/ExpectedCheckHolder.java": {
+      "subsystem": "impl-codec",
+      "role": "Interface holding a target claim name and verification BiPredicate."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/HeaderClaimsHolder.java": {
+      "subsystem": "impl-codec",
+      "role": "Typed ClaimsHolder specialization for JWT header claims."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/HeaderDeserializer.java": {
+      "subsystem": "impl-codec",
+      "role": "Jackson StdDeserializer reading JWT header JSON into BasicHeader."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/HeaderSerializer.java": {
+      "subsystem": "impl-codec",
+      "role": "Jackson serializer adapter for HeaderClaimsHolder."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/JWTParser.java": {
+      "subsystem": "impl-codec",
+      "role": "Configures ObjectMapper readers to parse header and payload JSON strings."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/JsonNodeClaim.java": {
+      "subsystem": "impl-codec",
+      "role": "Jackson JsonNode wrapper implementing Claim typed conversions (asInt, asDate, etc.)."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/PayloadClaimsHolder.java": {
+      "subsystem": "impl-codec",
+      "role": "Typed ClaimsHolder specialization for JWT payload claims."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/PayloadDeserializer.java": {
+      "subsystem": "impl-codec",
+      "role": "Jackson deserializer parsing NumericDate (exp/nbf/iat) and string/array aud claims."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/PayloadImpl.java": {
+      "subsystem": "impl-codec",
+      "role": "Immutable Payload POJO storing deserialized registered and custom claims."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/PayloadSerializer.java": {
+      "subsystem": "impl-codec",
+      "role": "Jackson serializer adapter for PayloadClaimsHolder."
+    },
+    "lib/src/main/java/com/auth0/jwt/impl/package-info.java": {
+      "subsystem": "impl-codec",
+      "role": "Internal package marker warning against direct external dependency."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/Claim.java": {
+      "subsystem": "interfaces",
+      "role": "Public interface exposing typed accessors for individual JWT claims."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/DecodedJWT.java": {
+      "subsystem": "interfaces",
+      "role": "Public interface combining Header, Payload, token string, and signature bytes."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/ECDSAKeyProvider.java": {
+      "subsystem": "interfaces",
+      "role": "KeyProvider extension supplying EC public/private keys by key ID."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/Header.java": {
+      "subsystem": "interfaces",
+      "role": "Public interface for accessing JWT header fields."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/JWTPartsParser.java": {
+      "subsystem": "interfaces",
+      "role": "Parser interface converting header and payload JSON strings into POJOs."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/JWTVerifier.java": {
+      "subsystem": "interfaces",
+      "role": "Public verifier interface defining verify(String) and verify(DecodedJWT)."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/KeyProvider.java": {
+      "subsystem": "interfaces",
+      "role": "Generic key provider interface mapping key IDs to public/private keys."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/Payload.java": {
+      "subsystem": "interfaces",
+      "role": "Public interface exposing standard registered and custom JWT payload claims."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/RSAKeyProvider.java": {
+      "subsystem": "interfaces",
+      "role": "KeyProvider extension supplying RSA public/private keys by key ID."
+    },
+    "lib/src/main/java/com/auth0/jwt/interfaces/Verification.java": {
+      "subsystem": "interfaces",
+      "role": "Fluent builder interface configuring claim checks, leeway, and clocks."
+    }
+  }
+}

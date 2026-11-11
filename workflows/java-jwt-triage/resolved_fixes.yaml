@@ -1,0 +1,36 @@
+# Ground-truth fix provenance for post-failure learning (strictly excluded from inference prompts).
+gh-652-exp-equals-now:
+  commit: "12ae664a"
+  pr: "#652"
+  fixed_file: "lib/src/main/java/com/auth0/jwt/JWTVerifier.java"
+  root_cause: "assertInstantIsFuture used !isAfter instead of isBefore; boundary check belongs in JWTVerifier."
+
+gh-679-empty-expected-aud:
+  commit: "d5c05d73"
+  pr: "#679"
+  fixed_file: "lib/src/main/java/com/auth0/jwt/JWTVerifier.java"
+  root_cause: "assertValidAudienceClaim dereferenced null audience collections in JWTVerifier instead of guarding expected/actual lists."
+
+gh-579-ecdsa-psychic-sig:
+  commit: "05b54499"
+  pr: "#579"
+  fixed_file: "lib/src/main/java/com/auth0/jwt/algorithms/ECDSAAlgorithm.java"
+  root_cause: "CVE-2022-21449 check added validateSignatureStructure rejecting r=0/s=0 inside ECDSAAlgorithm."
+
+gh-706-scientific-exp-overflow:
+  commit: "181dc51c"
+  pr: "#774"
+  fixed_file: "lib/src/main/java/com/auth0/jwt/impl/PayloadDeserializer.java"
+  root_cause: "getInstantFromSeconds gated on canConvertToLong() before isNumber(), emitting non-numeric error during JSON deserialization."
+
+gh-663-empty-aud-string:
+  commit: "d8fe9a26"
+  pr: "#663"
+  fixed_file: "lib/src/main/java/com/auth0/jwt/impl/PayloadDeserializer.java"
+  root_cause: "getStringOrArray dropped empty string audience values before constructing PayloadImpl."
+
+gh-606-null-token-split:
+  commit: "f530b268"
+  pr: "#606"
+  fixed_file: "lib/src/main/java/com/auth0/jwt/TokenUtils.java"
+  root_cause: "TokenUtils.splitToken invoked token.split() before null guard, prior to JWTDecoder Base64 decoding."

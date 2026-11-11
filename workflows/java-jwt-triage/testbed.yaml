@@ -1,0 +1,64 @@
+- id: "gh-652-exp-equals-now"
+  description: "PR #652 (12ae664a): exp claim treated valid when equal to now"
+  input:
+    query: >-
+      RFC 7519 timestamp assertion defect: verifying a token whose exp claim equals
+      the exact current second now with zero leeway erroneously succeeds instead of
+      raising TokenExpiredException.
+  expected_output:
+    subsystem: "core-verifier"
+    suspected_file: "lib/src/main/java/com/auth0/jwt/JWTVerifier.java"
+
+- id: "gh-679-empty-expected-aud"
+  description: "Issue #674 / PR #679 (d5c05d73): empty expected audience throws NPE"
+  input:
+    query: >-
+      Assertion defect during claim matching: configuring verification with an empty
+      expected aud collection throws an uncaught NullPointerException instead of
+      failing with InvalidClaimException.
+  expected_output:
+    subsystem: "core-verifier"
+    suspected_file: "lib/src/main/java/com/auth0/jwt/JWTVerifier.java"
+
+- id: "gh-579-ecdsa-psychic-sig"
+  description: "PR #579 / CVE-2022-21449 (05b54499): ECDSA all-zero signature bypass"
+  input:
+    query: >-
+      Cryptographic signature bypass on JDK 15-18: ES256/ES384/ES512 verification
+      accepts forged zeroed signatures (r=0, s=0) without throwing
+      SignatureVerificationException.
+  expected_output:
+    subsystem: "algorithms"
+    suspected_file: "lib/src/main/java/com/auth0/jwt/algorithms/ECDSAAlgorithm.java"
+
+- id: "gh-706-scientific-exp-overflow"
+  description: "Issue #706 / PR #774 (181dc51c): scientific-notation NumericDate overflow message"
+  input:
+    query: >-
+      Tokens containing an out-of-range scientific-notation exp claim like
+      1.733162101e+26 fail with the misleading error "The claim exp contained a
+      non-numeric date value" instead of reporting NumericDate range overflow.
+  expected_output:
+    subsystem: "impl-codec"
+    suspected_file: "lib/src/main/java/com/auth0/jwt/impl/PayloadDeserializer.java"
+
+- id: "gh-663-empty-aud-string"
+  description: "PR #663 (d8fe9a26): empty string aud deserialized as null"
+  input:
+    query: >-
+      Decoding a token whose JSON payload has empty string claim "aud": "" yields
+      null from getAudience() instead of returning a singleton empty-string list.
+  expected_output:
+    subsystem: "impl-codec"
+    suspected_file: "lib/src/main/java/com/auth0/jwt/impl/PayloadDeserializer.java"
+
+- id: "gh-606-null-token-split"
+  description: "PR #606 / #611 (f530b268): null token NPE during dot-splitting"
+  input:
+    query: >-
+      Calling JWT.decode(null) throws an uncaught NullPointerException while splitting
+      header.payload.signature segments before Base64 decoding instead of throwing
+      JWTDecodeException.
+  expected_output:
+    subsystem: "core-token"
+    suspected_file: "lib/src/main/java/com/auth0/jwt/TokenUtils.java"

@@ -165,7 +165,7 @@ class MigrationSafetySensor(Sensor):
     keyword: "concurrently"
 ```
 
-Supported assertion rules in [`evaluate_expected_assertions`](../src/airframe/cli.py#L285-L350):
+Supported assertion rules in [`evaluate_expected_assertions`](../src/airframe/cli.py#L296-L360):
 * **Numbers:** Float tolerance `±1e-2`.
 * **Booleans / Strings / Nested Dicts:** Exact type-safe match (`bool` checked separately from `int`).
 * **`keyword`:** Case-insensitive substring check flattened across the entire output payload.
@@ -181,10 +181,11 @@ airframe run workflows/sql-migrator -i "CREATE INDEX idx_a ON t(a);" --mock --tr
 export GEMINI_API_KEY="..."
 airframe test workflows/sql-migrator --live
 
-# 3. Verify safe engine swap before switching models in production
+# 3. Verify safe engine swap offline (--mock), or set both GEMINI_API_KEY and ANTHROPIC_API_KEY for live compare
 airframe compare workflows/sql-migrator \
   --baseline gemini-2.0-flash \
-  --candidate claude-3-5-sonnet
+  --candidate claude-3-5-sonnet \
+  --mock
 ```
 
 After any run, inspect the latest `.airframe/traces/<trace_id>.jsonl` tree via `airframe trace` (or `airframe trace --json`) to audit turn count, tool timings, and sensor verdicts.

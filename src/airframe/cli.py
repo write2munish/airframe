@@ -5,11 +5,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from pathlib import Path
 import re
 import typing
+from pathlib import Path
 from typing import Any, Literal, Optional
 
+import typer
+import yaml
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 from rich.console import Console
@@ -18,8 +20,6 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.tree import Tree as RichTree
-import typer
-import yaml
 
 import airframe
 from airframe.adapters import (
@@ -83,7 +83,9 @@ def _mock_field_value(field_name: str, field_type: str, prompt: str) -> Any:
         return "SampleUser"
     if lower_name in ("passed", "is_active", "valid"):
         return True
-    if any(k in lower_name for k in ("amount", "interest", "total", "balance")):
+    if "interest" in lower_name:
+        return 1576.25
+    if any(k in lower_name for k in ("amount", "total", "balance")):
         return 11576.25
     if "rate" in lower_name:
         return 5.0
@@ -574,6 +576,7 @@ def compare_cmd(
     workflow_path: str = typer.Argument(..., help="Path to workflow directory."),
     baseline: str = typer.Option(..., "--baseline", "-b", help="Baseline model name (e.g. 'gemini-2.0-flash')."),
     candidate: str = typer.Option(..., "--candidate", "-c", help="Candidate model name (e.g. 'claude-3-5-sonnet')."),
+    live: bool = typer.Option(False, "--live", help="Require live LLM execution (fails if API keys missing)."),
     mock: bool = typer.Option(False, "--mock", help="Force offline deterministic mock mode."),
 ) -> None:
     """Run differential regression comparison between a baseline and candidate model."""
@@ -591,8 +594,16 @@ def compare_cmd(
         tool_registry = pack.load_tools()
         workflow_runner = WorkflowRunner()
 
-        base_adapter, base_is_mock = _resolve_cli_adapter(baseline, mock=mock, live=False)
-        cand_adapter, cand_is_mock = _resolve_cli_adapter(candidate, mock=mock, live=False)
+        base_adapter, base_is_mock = _resolve_cli_adapter(baseline, mock=mock, live=live)
+        cand_adapter, cand_is_mock = _resolve_cli_adapter(candidate, mock=mock, live=live)
+
+        if base_is_mock != cand_is_mock:
+            raise RuntimeError(
+                "Mixed live/mock comparison is invalid: "
+                f"'{baseline}' resolved to {'mock' if base_is_mock else 'live'} while "
+                f"'{candidate}' resolved to {'mock' if cand_is_mock else 'live'}. "
+                "Set credentials for both engines or pass '--mock'."
+            )
 
         if base_is_mock or cand_is_mock:
             console.print(
@@ -634,7 +645,7 @@ def compare_cmd(
                             passed=(len(failures) == 0),
                             latency_ms=run_res.latency_ms,
                             tokens=run_res.total_tokens,
-                            error_message="; ".join(failures) if failures else None,
+                            error="; ".join(failures) if failures else None,
                         )
                     )
                 except Exception as err:
@@ -644,7 +655,7 @@ def compare_cmd(
                             passed=False,
                             latency_ms=0.0,
                             tokens=0,
-                            error_message=str(err),
+                            error=str(err),
                         )
                     )
             return results

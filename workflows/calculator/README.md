@@ -60,7 +60,7 @@ def calculate_compound_interest(
 
 ---
 
-### Step 2: Define the Executable Contract (`guards/contracts.py`)
+### Step 2: Define the Executable Contract (`contracts.py`)
 Never let the agent emit freeform text to downstream services. Bind the response to a strict Pydantic v2 contract:
 
 ```python
@@ -71,15 +71,16 @@ class CompoundInterestContract(BaseModel):
     principal: float
     rate_percent: float
     time_years: float
+    compounding_frequency: int = 1
     total_amount: float
     total_interest: float
-    explanation: str = Field(description="Clear textual summary of calculation.")
+    explanation: str = Field(description="Human-readable breakdown of the calculation.")
 ```
 
 ---
 
-### Step 3: Implement Verification Sensors (`sensors/deterministic.py`)
-To prevent math hallucinations, create a **Tier 1 Deterministic Sensor** that independently recalculates the formula $A = P(1+r/n)^{nt}$:
+### Step 3: Implement Verification Sensors (`sensors.py`)
+To prevent math hallucinations, create a **Tier 1 Deterministic Sensor** that independently recalculates $A = P(1+r/n)^{nt}$ and checks both `total_amount` and `total_interest`:
 
 ```python
 from airframe.sensors.base import Sensor, SensorResult
@@ -95,46 +96,22 @@ class CompoundInterestMathSensor(Sensor):
 
     async def evaluate(self, candidate, context=None) -> SensorResult:
         data = candidate.model_dump() if hasattr(candidate, "model_dump") else candidate
-        expected_amount = data["principal"] * ((1 + (data["rate_percent"] / 100.0)) ** data["time_years"])
+        p = float(data["principal"])
+        r = float(data["rate_percent"]) / 100.0
+        t = float(data["time_years"])
+        n = int(data.get("compounding_frequency", 1))
+        expected_amount = p * ((1 + (r / n)) ** (n * t))
+        expected_interest = expected_amount - p
 
-        if abs(data["total_amount"] - expected_amount) > 0.05:
+        if abs(float(data["total_amount"]) - expected_amount) > 0.05 or abs(float(data["total_interest"]) - expected_interest) > 0.05:
             return SensorResult(sensor_name=self.name, tier=1, passed=False, message="Math mismatch detected!")
         return SensorResult(sensor_name=self.name, tier=1, passed=True, message="Math verified independently.")
 ```
 
 ---
 
-### Step 4: Write the Agent Blueprint (`blueprints/calculator_agent.yaml`)
-Apply the **Principle of Least Privilege**. Grant access *only* to the calculator tool:
-
-```yaml
-name: "financial-calculator"
-role: "Financial Calculation Specialist"
-system_prompt: "guides/task_spec.md"
-engine_binding: "gemini-2.0-flash"     # Swappable! Can be gpt-4o, claude-3-5-sonnet, or local ollama
-allowed_tools:
-  - "calculate_compound_interest"     # Whitelisted tool
-workspace_mode: "inherit"
-budget:
-  max_tokens: 15000
-  timeout_seconds: 60
-```
-
----
-
-### Step 5: Define Task Guidance (`guides/task_spec.md`)
-Guide the model *before* execution:
-```markdown
-# Rules
-1. Do NOT perform mental arithmetic.
-2. You MUST invoke `calculate_compound_interest`.
-3. Output strictly conforming to the `CompoundInterestContract` schema.
-```
-
----
-
-### Step 6: Configure the Workflow Manifest (`workflow.yaml`)
-Tie the components together:
+### Step 4: Configure the Unified Workflow Manifest (`workflow.yaml`)
+Single-agent packs declare `engine_binding`, whitelisted tools (`tools:`), inline `system_prompt:`, and `governance:` directly inside `workflow.yaml`:
 
 ```yaml
 id: "single-tool-calculator"
@@ -142,33 +119,59 @@ version: "1.0.0"
 topology: "single-agent"
 workspace_mode: "inherit"
 entrypoint_agent: "financial-calculator"
-agents:
-  - "blueprints/calculator_agent.yaml"
-testbed: "testbed/smoke.yaml"
+engine_binding: "gpt-4o-mini"          # Swappable! Can be gemini-2.0-flash, claude-3-5-sonnet, or local ollama
+tools:
+  - "calculate_compound_interest"      # Principle of least privilege: only this tool is whitelisted
+
+system_prompt: |
+  You are a financial calculation specialist.
+  Calculate compound interest according to the formula A = P(1 + r/n)^(nt).
+  When tools are available, you may verify results using calculate_compound_interest.
+  Format your final output strictly according to the CompoundInterestContract schema.
+
+governance:
+  max_turns: 5
+  timeout_seconds: 60
+  stall_threshold: 2
+  max_cost_usd: 0.10
+
+testbed: "testbed.yaml"
 ```
 
 ---
 
-### Step 7: Create Golden Test Cases (`testbed/smoke.yaml`)
-Ensure that changing foundation models in the future never introduces regressions:
+### Step 5: Create Golden Test Cases (`testbed.yaml`)
+Ensure that switching foundation models or prompts never introduces regressions:
 
 ```yaml
-- id: "calc-10k-5pct-3yr"
-  description: "Compound interest on ₹10,000 at 5% for 3 years"
+- id: "calc-smoke-01"
+  description: "Compound interest on ₹10,000 at 5% for 3 years annually"
   input:
-    principal: 10000
+    principal: 10000.0
     rate_percent: 5.0
-    time_years: 3
-  expected:
+    time_years: 3.0
+    compounding_frequency: 1
+  expected_output:
     total_amount: 11576.25
     total_interest: 1576.25
+
+- id: "calc-smoke-02"
+  description: "Compound interest on ₹50,000 at 8% for 2 years quarterly"
+  input:
+    principal: 50000.0
+    rate_percent: 8.0
+    time_years: 2.0
+    compounding_frequency: 4
+  expected_output:
+    total_amount: 58582.97
+    total_interest: 8582.97
 ```
 
 ---
 
 ## Running & Testing the Workflow
 
-### Method 1: Execute via Airframe CLI
+### Method 1: Execute via Airframe CLI (Dry-Run Mock Mode)
 ```bash
 airframe run workflows/calculator -i "Calculate the compound interest on ₹10,000 at 5% for 3 years" --mock
 ```
@@ -178,45 +181,51 @@ airframe run workflows/calculator -i "Calculate the compound interest on ₹10,0
 ╭──────────────────────── ✈️  Airframe Execution Engine ────────────────────────╮
 │ Executing Workflow: single-tool-calculator                                   │
 │ Engine: gpt-4o-mini  Topology: single-agent                                  │
-│ Input: Calculate the compound interest on ₹10,000 at 5% for 3 years           │
+│ Entrypoint: financial-calculator                                             │
+│ Input: Calculate the compound interest on ₹10,000 at 5% for 3 years          │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
 ✓ Execution Completed Successfully
 ╭──────────────── Validated Contract: CompoundInterestContract ────────────────╮
 │ {                                                                            │
-│   "currency": "₹",                                                           │
+│   "currency": "\u20b9",                                                      │
 │   "principal": 10000.0,                                                      │
 │   "rate_percent": 5.0,                                                       │
 │   "time_years": 3.0,                                                         │
 │   "compounding_frequency": 1,                                                │
 │   "total_amount": 11576.25,                                                  │
-│   "total_interest": 11576.25,                                                │
+│   "total_interest": 1576.25,                                                 │
 │   "explanation": "Verified explanation"                                      │
 │ }                                                                            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
-Execution Telemetry & Governance 
-┏━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
-┃ Metric          ┃ Value       ┃
-┡━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━┩
-│ Engine Provider │ mock        │
-│ Model           │ mock-engine │
-│ Input Tokens    │ 120         │
-│ Output Tokens   │ 65          │
-│ Total Tokens    │ 185         │
-│ Latency         │ 18.5ms      │
-│ Estimated Cost  │ $0.00030    │
-│ Workspace Mode  │ inherit     │
-└─────────────────┴─────────────┘
+                        Execution Telemetry & Governance                        
+┏━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Metric           ┃ Value                                                     ┃
+┡━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Engine Provider  │ mock                                                      │
+│ Model            │ gpt-4o-mini                                               │
+│ Entrypoint Agent │ financial-calculator                                      │
+│ Turns Executed   │ 1                                                         │
+│ Input Tokens     │ 120                                                       │
+│ Output Tokens    │ 65                                                        │
+│ Total Tokens     │ 185                                                       │
+│ Latency          │ 1.8ms                                                     │
+│ Estimated Cost   │ $0.00030                                                  │
+│ Workspace Mode   │ inherit                                                   │
+└──────────────────┴───────────────────────────────────────────────────────────┘
 ```
 
-### Method 2: Test the Workflow Testbed
+### Method 2: Test the Workflow Testbed (Live LLM)
+Because `calc-smoke-02` verifies non-hardcoded quarterly compounding (`₹50,000`) via `CompoundInterestMathSensor`, run the full testbed against a live model (`--live` with `OPENAI_API_KEY` or `-e ollama/...`):
 ```bash
-airframe test workflows/calculator
+airframe test workflows/calculator --live
 ```
 
 ### Method 3: Benchmark Model Swaps (Zero Regressions)
+With credentials set for both engines (`GEMINI_API_KEY` and `ANTHROPIC_API_KEY`), benchmark a model swap:
 ```bash
 airframe compare workflows/calculator \
   --baseline gemini-2.0-flash \
-  --candidate claude-3-5-sonnet
+  --candidate claude-3-5-sonnet \
+  --live
 ```

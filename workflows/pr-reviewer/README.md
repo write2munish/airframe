@@ -97,7 +97,11 @@ airframe run workflows/pr-reviewer \
 ### Run Testbed Regression Suite
 
 ```bash
-airframe test workflows/pr-reviewer
+# Offline deterministic verification
+airframe test workflows/pr-reviewer --mock
+
+# Enforce live model credentials
+airframe test workflows/pr-reviewer --live
 ```
 
 ### Benchmark Model Swap (Differential Regression Analysis)
@@ -105,7 +109,9 @@ airframe test workflows/pr-reviewer
 Airframe allows comparing baseline vs candidate models across this workflow's testbed before upgrading models in production:
 
 ```bash
+# Offline dry-run comparison (or omit --mock when keys for both engines are set)
 airframe compare workflows/pr-reviewer \
   --baseline gemini-2.0-flash \
-  --candidate claude-3-5-sonnet
+  --candidate claude-3-5-sonnet \
+  --mock
 ```

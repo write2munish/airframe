@@ -5,7 +5,7 @@
 $$\text{Agent} = \text{Engine (Model)} + \text{Airframe (Harness)}$$
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests Passing](https://img.shields.io/badge/tests-86%20offline%20passed-brightgreen.svg)](tests/)
+[![CI](https://github.com/write2munish/airframe/actions/workflows/ci.yml/badge.svg)](https://github.com/write2munish/airframe/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ---
@@ -75,11 +75,15 @@ airframe test workflows/code-auditor-swarm --mock
 python3 workflows/java-jwt-triage/evolve.py
 ```
 
-### 4. Run Automated Tests (86/86 Offline Passing)
+### 4. Run Automated Tests & Lint
 
 ```bash
 # Run deterministic offline unit and integration suite (zero external API keys required):
 PYTHONPATH=src pytest tests/unit tests/integration -v
+
+# Run required Ruff checks (matches .github/workflows/ci.yml):
+ruff check --select E9 src tests
+ruff check --select E4,E7,E9,F,I src/airframe/cli.py tests/unit/test_budget_concurrency.py tests/unit/test_workflows_and_diff.py
 
 # Run opt-in live vendor adapter smoke tests (requires AIRFRAME_LIVE_TESTS=1 + keys / Ollama):
 AIRFRAME_LIVE_TESTS=1 PYTHONPATH=src pytest tests/live -v
@@ -95,7 +99,6 @@ AIRFRAME_LIVE_TESTS=1 PYTHONPATH=src pytest tests/live -v
 import asyncio
 from pydantic import BaseModel, Field
 from airframe.adapters import get_adapter
-from airframe.guards import ExecutableGuard, PayloadBounds
 from airframe.sensors import PythonASTSensor, RegexSensor, SensorPipeline
 
 # 1. Define your canonical contract schema
@@ -173,8 +176,8 @@ workflows/<use-case-name>/
 ### CLI Workflow Commands
 
 ```bash
-# Execute a workflow end-to-end with real model adapter and contract validation
-airframe run workflows/calculator -i "Calculate compound interest on ₹10,000 at 5% for 3 years"
+# Execute a workflow end-to-end in deterministic offline mode with contract & sensor validation
+airframe run workflows/calculator -i "Calculate compound interest on ₹10,000 at 5% for 3 years" --mock
 
 # Execute in deterministic dry-run verification mode and render hierarchical trace tree
 airframe run workflows/weather-forecaster -i "Will it rain in Bengaluru tomorrow at 3 PM?" --mock --trace
@@ -182,13 +185,14 @@ airframe run workflows/weather-forecaster -i "Will it rain in Bengaluru tomorrow
 # Inspect latest trace tree (or pass trace_id / file path / --json)
 airframe trace
 
-# Run local regression testbed
-airframe test workflows/pr-reviewer
+# Run local regression testbed offline (pass --live to enforce provider API keys)
+airframe test workflows/pr-reviewer --mock
 
-# Benchmark model swap (verify zero regressions when upgrading models)
+# Benchmark model swap (pass --mock offline, or set keys for both engines to compare live)
 airframe compare workflows/pr-reviewer \
   --baseline gemini-2.0-flash \
-  --candidate claude-3-5-sonnet
+  --candidate claude-3-5-sonnet \
+  --mock
 
 # Scaffold a minimal, single-file workflow (lightweight mode, no empty subdirectories)
 airframe init workflow my-task --light
@@ -203,6 +207,8 @@ airframe init workflow customer-support
 
 ```
 airframe/
+├── .github/workflows/ci.yml          # Required CI workflow (pytest + ruff)
+├── CONTRIBUTING.md                   # Local checks, commit policy, correctness gates
 ├── README.md                         # Project overview and quickstart
 ├── pyproject.toml                    # Package metadata and dependencies
 ├── docs/
@@ -230,7 +236,7 @@ airframe/
 │       └── cli.py                    # CLI (`airframe run`, `test`, `compare`, `trace`, `init`)
 │
 ├── tests/
-│   ├── unit/                         # Deterministic unit suites (`test_adapters.py`, `test_cli.py`, `test_isolation.py`, `test_tools.py`, `test_telemetry_tracer.py`, etc.)
+│   ├── unit/                         # Deterministic unit suites (`test_adapters.py`, `test_budget_concurrency.py`, `test_cli.py`, `test_isolation.py`, `test_java_jwt_triage.py`, etc.)
 │   ├── integration/                  # End-to-end runtime, worktree crash recovery & governance suites (`test_system_integration.py`, `test_runtime_runner.py`)
 │   └── live/                         # Opt-in live vendor HTTP smoke tests (`AIRFRAME_LIVE_TESTS=1`)
 └── workflows/                        # Self-contained packs (`pr-reviewer`, `basic-calculator`, `calculator`, `weather-forecaster`, `java-jwt-triage`, `patch-verifier`, `code-auditor-swarm`)

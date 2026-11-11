@@ -46,9 +46,9 @@ workflows/weather-forecaster/
 ## 3. Running the Workflow
 
 ```bash
-# Execute end-to-end via CLI
+# Execute end-to-end via CLI (offline dry-run mock)
 airframe run workflows/weather-forecaster -i "Will it rain in Bengaluru tomorrow at 3 PM?" --mock
 
-# Run regression testbed
-airframe test workflows/weather-forecaster
+# Run regression testbed live (ZeroHallucinationWeatherSensor verifies live tool_truth)
+airframe test workflows/weather-forecaster --live
 ```

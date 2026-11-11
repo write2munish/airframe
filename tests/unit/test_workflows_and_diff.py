@@ -1,6 +1,7 @@
 """Unit tests for workflow pack loading, differential regression diffs, and CLI commands."""
 
 from pathlib import Path
+
 import pytest
 from typer.testing import CliRunner
 
@@ -44,6 +45,7 @@ def test_workflow_scaffolding(tmp_path: Path):
 def test_lightweight_single_file_workflow(tmp_path: Path):
     """Test single-file inline workflow without requiring 6 mandatory subdirectories."""
     import yaml
+
     from airframe.governance.circuit_breakers import Budget
 
     # 1. Test lightweight scaffold option
@@ -126,30 +128,135 @@ def test_differential_regression_comparison():
 
 def test_cli_workflow_commands(tmp_path: Path):
     """Test CLI test, compare, run, and init commands."""
-    # 1. airframe test workflows/pr-reviewer
-    res_test = runner.invoke(app, ["test", "workflows/pr-reviewer"])
-    assert res_test.exit_code == 0
+    # 1. airframe test workflows/pr-reviewer --mock
+    res_test = runner.invoke(app, ["test", "workflows/pr-reviewer", "--mock"])
+    assert res_test.exit_code == 0, res_test.stdout
     assert "Testbed Results: pr-reviewer" in res_test.stdout
 
-    # 2. airframe compare workflows/pr-reviewer
+    # 2. airframe compare workflows/pr-reviewer --mock
     res_comp = runner.invoke(
         app,
-        ["compare", "workflows/pr-reviewer", "--baseline", "gemini-2.0-flash", "--candidate", "claude-3-5-sonnet"],
+        [
+            "compare",
+            "workflows/pr-reviewer",
+            "--baseline",
+            "gemini-2.0-flash",
+            "--candidate",
+            "claude-3-5-sonnet",
+            "--mock",
+        ],
     )
-    assert res_comp.exit_code == 0
+    assert res_comp.exit_code == 0, res_comp.stdout
     assert "Differential Regression Analysis" in res_comp.stdout
     assert "DRY-RUN MOCK MODE" in res_comp.stdout
 
-    # 3. airframe run workflows/pr-reviewer
-    res_run = runner.invoke(app, ["run", "workflows/pr-reviewer", "--input", "pr_diff_patch"])
-    assert res_run.exit_code == 0
+    # 3. airframe run workflows/pr-reviewer --mock
+    res_run = runner.invoke(app, ["run", "workflows/pr-reviewer", "--input", "pr_diff_patch", "--mock"])
+    assert res_run.exit_code == 0, res_run.stdout
     assert "Executing Workflow: pr-reviewer" in res_run.stdout
 
-    # 4. airframe init workflow new-agent
+    # 4. airframe run workflows/calculator --mock (verifies CompoundInterestMathSensor passes)
+    res_calc = runner.invoke(
+        app,
+        [
+            "run",
+            "workflows/calculator",
+            "-i",
+            "Calculate compound interest on ₹10,000 at 5% for 3 years",
+            "--mock",
+        ],
+    )
+    assert res_calc.exit_code == 0, res_calc.stdout
+    assert "Validated Contract: CompoundInterestContract" in res_calc.stdout
+    assert "1576.25" in res_calc.stdout
+
+    # 5. airframe init workflow new-agent
     res_init = runner.invoke(app, ["init", "workflow", "new-agent", "--dir", str(tmp_path)])
-    assert res_init.exit_code == 0
+    assert res_init.exit_code == 0, res_init.stdout
     assert "Created workflow pack" in res_init.stdout
     assert (tmp_path / "new-agent" / "workflow.yaml").exists()
+
+
+def test_cli_compare_mock_ignores_ambient_keys_and_rejects_mixed_live_mock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify --mock stays offline when API keys exist, while mixed live/mock fails explicitly."""
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-gemini-key")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    # Explicit --mock forces both sides to MockExecutionAdapter and exits 0.
+    res_mock = runner.invoke(
+        app,
+        [
+            "compare",
+            "workflows/pr-reviewer",
+            "--baseline",
+            "gemini-2.0-flash",
+            "--candidate",
+            "claude-3-5-sonnet",
+            "--mock",
+        ],
+    )
+    assert res_mock.exit_code == 0, res_mock.stdout
+    assert "DRY-RUN MOCK MODE" in res_mock.stdout
+
+    # Without --mock, comparing a live baseline against a mock candidate must fail cleanly.
+    res_mixed = runner.invoke(
+        app,
+        [
+            "compare",
+            "workflows/pr-reviewer",
+            "--baseline",
+            "gemini-2.0-flash",
+            "--candidate",
+            "claude-3-5-sonnet",
+        ],
+    )
+    assert res_mixed.exit_code == 1
+    assert "Mixed live/mock comparison is invalid" in " ".join(res_mixed.stdout.split())
+
+
+def test_cli_compare_exits_1_on_regression_and_records_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify airframe compare exits 1 on regression and populates CaseResult.error."""
+    import airframe.cli as cli_mod
+
+    captured_candidates: list[RunScorecard] = []
+    real_compare = compare_scorecards
+
+    class _RegressingMockAdapter(cli_mod.MockExecutionAdapter):
+        async def invoke(self, prompt: str, system_prompt: str | None = None, **kwargs):
+            if "SELECT * FROM users" in prompt:
+                return cli_mod.ModelResponse(
+                    content='{"summary": "All good", "passed": true, "issues": []}',
+                    model_name=self.model_name,
+                    provider="mock",
+                )
+            return await super().invoke(prompt, system_prompt=system_prompt, **kwargs)
+
+    def _fake_resolve(engine_name: str, *, mock: bool = False, live: bool = False):
+        if "candidate" in engine_name:
+            return _RegressingMockAdapter(model_name=engine_name), True
+        return cli_mod.MockExecutionAdapter(model_name=engine_name), True
+
+    def _spy_compare(base_sc: RunScorecard, cand_sc: RunScorecard):
+        captured_candidates.append(cand_sc)
+        return real_compare(base_sc, cand_sc)
+
+    monkeypatch.setattr(cli_mod, "_resolve_cli_adapter", _fake_resolve)
+    monkeypatch.setattr(cli_mod, "compare_scorecards", _spy_compare)
+
+    res = runner.invoke(
+        app,
+        ["compare", "workflows/pr-reviewer", "-b", "base-engine", "-c", "candidate-engine", "--mock"],
+    )
+    assert res.exit_code == 1
+    assert "Regressions detected" in res.stdout
+    assert len(captured_candidates) == 1
+    failed = [r for r in captured_candidates[0].results if not r.passed]
+    assert len(failed) == 1
+    assert failed[0].error is not None and "BLOCKER" in failed[0].error
 
 
 def test_workflow_pack_tool_and_sensor_discovery():

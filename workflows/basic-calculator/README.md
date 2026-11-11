@@ -12,7 +12,7 @@ This entire workflow was generated in one command using Airframe's `--light` fla
 airframe init workflow basic-calculator --light --dir workflows
 ```
 
-Unlike multi-agent enterprise topologies that require separate `blueprints/`, `guides/`, `guards/`, and `sensors/` directories, a single-agent task is colocated into 3 flat files:
+Unlike multi-agent enterprise topologies that require separate `blueprints/`, `guides/`, `guards/`, and `sensors/` directories, a single-agent task is colocated into flat files:
 
 ```
 workflows/basic-calculator/
@@ -69,9 +69,9 @@ class CalculationResult(BaseModel):
 ## 3. Running & Testing
 
 ```bash
-# Run end-to-end via CLI
+# Run end-to-end via CLI (offline dry-run mock)
 airframe run workflows/basic-calculator -i "Calculate compound interest on ₹10,000 at 5% for 3 years" --mock
 
-# Run regression testbed
-airframe test workflows/basic-calculator
+# Run regression testbed against a live model engine (verifies computed arithmetic outputs)
+airframe test workflows/basic-calculator --live
 ```

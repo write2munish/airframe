@@ -20,7 +20,7 @@ In aerospace engineering, an **airframe** is the complete structural aircraft—
 * **Guides Before, Sensors After**: Multi-tier sensor pipeline (Tier 1 deterministic, Tier 2 semantic, Tier 3 LLM judge) with fast-fail short-circuiting to save token costs.
 * **Unified Feedback Loop & Contract Repair**: Canonical `run_with_retry` / `FeedbackLoop` primitive where executable schema contracts operate as standard Tier 1 `SchemaSensor` components.
 * **Unified Workspace Isolation Dispatcher**: Single `get_workspace(mode, agent_id, repo_path)` factory supporting `"inherit"` (shared), `"branch"` (Git worktree), and `"sandbox"` (ephemeral tempdir).
-* **De-duped Governance & Lightweight Packs**: Single shared `Budget` model with `merge_with_override`, supporting both inline single-file workflows and full multi-agent directories.
+* **De-duped Governance & Atomic Budget Gating**: Single shared `Budget` model with `merge_with_override`, atomic pre-flight `BudgetTracker` reservation/reconciliation/refund (`reserve`/`reconcile`/`refund` + `SupervisorAgent` spawn gating per [ADR 0002](docs/adr/0002-budget-concurrency-model.md)), supporting both inline single-file workflows and full multi-agent directories.
 * **Long-Horizon Autonomy**: Multi-shift execution and disk-externalized state (`plan.md`, `task_queue.json`).
 * **Multi-Agent Topologies**: Supervisor/Worker fleets with independent Evaluator-Optimizer loops.
 * **Dual-Layer Isolation**: Context window partitioning (discarding noisy exploration tokens) + Git Worktree filesystem sandboxing.
@@ -142,7 +142,7 @@ if __name__ == "__main__":
 | **Phase 2** | **Guards & Sensor Pipeline** | `ExecutableGuard` (Pydantic v2), byte/line ceilings, Tier 1–3 sensors, fast-fail short-circuiting, `ToolRegistry` / phase scoping / `ToolRunner` | ✅ **Completed** ([`test_guards_and_sensors.py`](tests/unit/test_guards_and_sensors.py), [`test_tools.py`](tests/unit/test_tools.py)) |
 | **Phase 3** | **Dual-Layer Isolation** | `AgentBlueprint` manifests, locked `WorktreeManager` with `SIGKILL`/`SIGINT`/`SIGTERM` compensation & `WorktreeConflictError`, `ContextPartitioner` (`fsync` + `.corrupt_tail` recovery) | ✅ **Completed** ([`test_blueprints.py`](tests/unit/test_blueprints.py), [`test_isolation.py`](tests/unit/test_isolation.py)) · Container mode (`workspace_mode="container"`) **Deferred (per [ADR 0001](docs/adr/0001-workflow-vs-container-isolation.md))** |
 | **Phase 4** | **Multi-Agent, IPC & Runner** | Async typed `EventBus`, `SupervisorAgent` with `RecursionLimiter`, `EvaluatorOptimizerLoop`, `WorkflowRunner` (`single-agent`, `orchestrator-workers`, `evaluator-optimizer`), `AirframeTracer` W3C JSONL trace trees | ✅ **Completed** ([`test_orchestration.py`](tests/unit/test_orchestration.py), [`test_telemetry_tracer.py`](tests/unit/test_telemetry_tracer.py), [`test_runtime_runner.py`](tests/integration/test_runtime_runner.py)) · `router` topology **Not Implemented** |
-| **Phase 5** | **Long-Horizon Shifts & Governance** | Crash-safe `DiskStateManager` (`atomic_write_text`, re-entrant `flock`, `.bak` recovery), `ShiftTurnoverEngine` with git checkpointing & history wipe, `BudgetTracker`, `StallDetector`, `HumanApprovalGate`, `max_turns` & `timeout_seconds` | ✅ **Completed** ([`test_long_horizon_and_governance.py`](tests/unit/test_long_horizon_and_governance.py), [`test_system_integration.py`](tests/integration/test_system_integration.py), [`test_runtime_runner.py`](tests/integration/test_runtime_runner.py)) |
+| **Phase 5** | **Long-Horizon Shifts & Governance** | Crash-safe `DiskStateManager` (`atomic_write_text`, re-entrant `flock`, `.bak` recovery), `ShiftTurnoverEngine` with git checkpointing & history wipe, thread-safe atomic-reservation `BudgetTracker` (`reserve`/`reconcile`/`refund`), `SupervisorAgent` budget gating (per **[ADR 0002](docs/adr/0002-budget-concurrency-model.md)**), `StallDetector`, `HumanApprovalGate`, `max_turns` & `timeout_seconds` | ✅ **Completed** ([`test_long_horizon_and_governance.py`](tests/unit/test_long_horizon_and_governance.py), [`test_budget_concurrency.py`](tests/unit/test_budget_concurrency.py), [`test_system_integration.py`](tests/integration/test_system_integration.py), [`test_runtime_runner.py`](tests/integration/test_runtime_runner.py)) |
 | **Phase 6** | **Workflow Packs & CLI Diff Engine**| `WorkflowPack` (`load_tools`, `load_sensors`, `entrypoint_agent`), `airframe run`/`test`/`compare`/`trace`/`init`, semantic `expected` assertions & custom sensor gates, differential scorecard comparator | ✅ **Completed** ([`test_cli.py`](tests/unit/test_cli.py), [`test_workflows_and_diff.py`](tests/unit/test_workflows_and_diff.py), [`test_weather_forecaster.py`](tests/unit/test_weather_forecaster.py), [`test_showcase_workflows.py`](tests/unit/test_showcase_workflows.py)) |
 
 ---
@@ -216,7 +216,7 @@ airframe/
 │   ├── WRITING_WORKFLOWS.md          # Step-by-step Workflow Pack authoring handbook
 │   ├── EXTENDING.md                  # Plug-in guide: adapters, sensors, tools, workspaces, self-improvement
 │   ├── ARCHITECTURE.md               # Architectural principles, FR-1..FR-15 verification matrix, NFRs
-│   └── adr/                          # Architecture Decision Records (ADR 0001)
+│   └── adr/                          # Architecture Decision Records (ADR 0001, ADR 0002)
 │
 ├── src/
 │   └── airframe/
@@ -228,7 +228,7 @@ airframe/
 │       ├── orchestration/            # Supervisor, Evaluator-Optimizer, shift turnover (Phase 4, 5)
 │       ├── ipc/                      # Async mailbox, event bus, cancellation cascades (Phase 4)
 │       ├── tools/                    # Tool registry, phase scoper (max 5/phase), ToolRunner (FR-4)
-│       ├── governance/               # Budget trackers, stall/recursion detectors, HITL gates (Phase 5)
+│       ├── governance/               # Atomic-reservation BudgetTracker, stall/recursion detectors, HITL gates (Phase 5)
 │       ├── state/                    # Crash-safe state externalizer (`atomic_write_text`, `.bak`) (Phase 5)
 │       ├── runner/                   # Canonical `WorkflowRunner` & ReAct loop runtime (FR-10..FR-13)
 │       ├── telemetry/                # Hierarchical JSONL `AirframeTracer`, scorecards, diff reports (FR-14)
@@ -251,3 +251,4 @@ airframe/
 * **[docs/EXTENDING.md](docs/EXTENDING.md)**: Guide to extending adapters, tools, sensors, workspaces, topologies, traces, and self-improving loops.
 * **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**: Core architectural principles, FR-1..FR-15 verification matrix, and NFRs.
 * **[docs/adr/0001-workflow-vs-container-isolation.md](docs/adr/0001-workflow-vs-container-isolation.md)**: ADR 0001: Workflow-Level Isolation vs. Container-Based Isolation.
+* **[docs/adr/0002-budget-concurrency-model.md](docs/adr/0002-budget-concurrency-model.md)**: ADR 0002: Budget Gate Concurrency Model — In-Process Atomic Reservation vs. Cross-Process & Lock-File Accounting.

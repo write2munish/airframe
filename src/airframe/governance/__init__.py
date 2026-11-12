@@ -3,6 +3,7 @@
 from airframe.governance.circuit_breakers import (
     ApprovalRejectedError,
     BudgetExceededError,
+    BudgetReservation,
     BudgetTracker,
     GovernanceError,
     HumanApprovalGate,
@@ -15,6 +16,7 @@ from airframe.governance.circuit_breakers import (
 __all__ = [
     "ApprovalRejectedError",
     "BudgetExceededError",
+    "BudgetReservation",
     "BudgetTracker",
     "GovernanceError",
     "HumanApprovalGate",

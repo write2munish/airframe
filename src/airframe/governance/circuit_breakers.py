@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable
+import threading
+import uuid
+from dataclasses import dataclass
+from typing import Callable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -67,8 +70,18 @@ AgentBudget = Budget
 GovernanceSpec = Budget
 
 
+@dataclass(frozen=True)
+class BudgetReservation:
+    """In-flight budget hold debited atomically before spawning a task or invoking a model."""
+
+    reservation_id: str
+    tokens: int = 0
+    cost_usd: float = 0.0
+    label: str = ""
+
+
 class BudgetTracker:
-    """Monitors token usage and financial spend, enforcing hard budget ceilings."""
+    """Monitors token usage and financial spend, enforcing hard budget ceilings via atomic reservations."""
 
     def __init__(
         self,
@@ -83,10 +96,149 @@ class BudgetTracker:
             self.max_tokens = max_tokens
             self.max_cost_usd = max_cost_usd
 
+        self._lock = threading.Lock()
         self.total_input_tokens = 0
         self.total_output_tokens = 0
         self.total_tokens = 0
         self.total_cost_usd = 0.0
+        self.reserved_tokens = 0
+        self.reserved_cost_usd = 0.0
+        self._active_reservations: dict[str, BudgetReservation] = {}
+
+    @property
+    def effective_tokens(self) -> int:
+        """Return total committed plus currently reserved in-flight tokens."""
+        with self._lock:
+            return self.total_tokens + self.reserved_tokens
+
+    @property
+    def effective_cost_usd(self) -> float:
+        """Return total committed plus currently reserved in-flight spend in USD."""
+        with self._lock:
+            return self.total_cost_usd + self.reserved_cost_usd
+
+    @property
+    def remaining_tokens(self) -> int | None:
+        """Return remaining token headroom after committed and reserved holds, or None if uncapped."""
+        if self.max_tokens is None:
+            return None
+        with self._lock:
+            return max(0, self.max_tokens - (self.total_tokens + self.reserved_tokens))
+
+    @property
+    def remaining_cost_usd(self) -> float | None:
+        """Return remaining USD headroom after committed and reserved holds, or None if uncapped."""
+        if self.max_cost_usd is None:
+            return None
+        with self._lock:
+            return max(0.0, self.max_cost_usd - (self.total_cost_usd + self.reserved_cost_usd))
+
+    @property
+    def active_reservations_count(self) -> int:
+        """Return number of un-reconciled in-flight reservations."""
+        with self._lock:
+            return len(self._active_reservations)
+
+    def reserve(
+        self,
+        estimated_tokens: int = 0,
+        estimated_cost_usd: float = 0.0,
+        *,
+        label: str = "",
+    ) -> BudgetReservation:
+        """Atomically verify remaining headroom and debit a pre-flight reservation."""
+        est_tokens = max(0, int(estimated_tokens))
+        est_cost = max(0.0, float(estimated_cost_usd))
+
+        with self._lock:
+            projected_tokens = self.total_tokens + self.reserved_tokens + est_tokens
+            if self.max_tokens is not None and projected_tokens > self.max_tokens:
+                raise BudgetExceededError(
+                    f"Token budget exceeded on pre-flight reserve: {projected_tokens} "
+                    f"(committed={self.total_tokens}, reserved={self.reserved_tokens}, "
+                    f"requested={est_tokens}) > {self.max_tokens} ceiling."
+                )
+
+            projected_cost = self.total_cost_usd + self.reserved_cost_usd + est_cost
+            if self.max_cost_usd is not None and projected_cost > self.max_cost_usd + 1e-12:
+                raise BudgetExceededError(
+                    f"Cost budget exceeded on pre-flight reserve: ${projected_cost:.4f} "
+                    f"(committed=${self.total_cost_usd:.4f}, reserved=${self.reserved_cost_usd:.4f}, "
+                    f"requested=${est_cost:.4f}) > ${self.max_cost_usd:.4f} ceiling."
+                )
+
+            reservation = BudgetReservation(
+                reservation_id=uuid.uuid4().hex,
+                tokens=est_tokens,
+                cost_usd=est_cost,
+                label=label,
+            )
+            self._active_reservations[reservation.reservation_id] = reservation
+            self.reserved_tokens += est_tokens
+            self.reserved_cost_usd += est_cost
+            return reservation
+
+    def _pop_reservation_locked(self, reservation: BudgetReservation) -> bool:
+        """Remove an active reservation while holding self._lock (idempotent)."""
+        active = self._active_reservations.pop(reservation.reservation_id, None)
+        if active is None:
+            return False
+        self.reserved_tokens = max(0, self.reserved_tokens - active.tokens)
+        self.reserved_cost_usd = max(0.0, self.reserved_cost_usd - active.cost_usd)
+        if not self._active_reservations:
+            self.reserved_tokens = 0
+            self.reserved_cost_usd = 0.0
+        return True
+
+    def _commit_and_check_locked(
+        self,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float = 0.0,
+    ) -> None:
+        """Commit actual usage while holding self._lock and validate budget ceilings."""
+        self.total_input_tokens += input_tokens
+        self.total_output_tokens += output_tokens
+        self.total_tokens += input_tokens + output_tokens
+        self.total_cost_usd += cost_usd
+
+        if self.max_tokens is not None and self.total_tokens > self.max_tokens:
+            raise BudgetExceededError(
+                f"Token budget exceeded: {self.total_tokens} > {self.max_tokens} ceiling."
+            )
+
+        if self.max_cost_usd is not None and self.total_cost_usd > self.max_cost_usd + 1e-12:
+            raise BudgetExceededError(
+                f"Cost budget exceeded: ${self.total_cost_usd:.4f} > ${self.max_cost_usd:.4f} ceiling."
+            )
+
+    def release(self, reservation: BudgetReservation | None) -> bool:
+        """Release an unspent pre-flight reservation back to available budget (idempotent)."""
+        if reservation is None:
+            return False
+        with self._lock:
+            return self._pop_reservation_locked(reservation)
+
+    def refund(self, reservation: BudgetReservation | None) -> bool:
+        """Refund an unspent reservation after a failed or cancelled call (alias for release)."""
+        return self.release(reservation)
+
+    def reconcile(
+        self,
+        reservation: BudgetReservation | None,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float = 0.0,
+    ) -> None:
+        """Release reservation, commit actual consumption, and verify hard ceilings."""
+        with self._lock:
+            if reservation is not None:
+                self._pop_reservation_locked(reservation)
+            self._commit_and_check_locked(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=cost_usd,
+            )
 
     def record_usage(
         self,
@@ -95,19 +247,11 @@ class BudgetTracker:
         cost_usd: float = 0.0,
     ) -> None:
         """Record token consumption and check against budget ceilings."""
-        self.total_input_tokens += input_tokens
-        self.total_output_tokens += output_tokens
-        self.total_tokens += (input_tokens + output_tokens)
-        self.total_cost_usd += cost_usd
-
-        if self.max_tokens is not None and self.total_tokens > self.max_tokens:
-            raise BudgetExceededError(
-                f"Token budget exceeded: {self.total_tokens} > {self.max_tokens} ceiling."
-            )
-
-        if self.max_cost_usd is not None and self.total_cost_usd > self.max_cost_usd:
-            raise BudgetExceededError(
-                f"Cost budget exceeded: ${self.total_cost_usd:.4f} > ${self.max_cost_usd:.4f} ceiling."
+        with self._lock:
+            self._commit_and_check_locked(
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=cost_usd,
             )
 
 

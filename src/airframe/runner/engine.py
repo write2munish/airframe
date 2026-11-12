@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from contextvars import ContextVar
 import importlib.util
 import json
 import os
-from pathlib import Path
 import time
+from contextvars import ContextVar
+from pathlib import Path
 from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, Field, ValidationError
@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 from airframe.adapters.base import ModelAdapter, ModelResponse
 from airframe.blueprints.schema import AgentBlueprint
 from airframe.governance.circuit_breakers import (
+    BudgetReservation,
     BudgetTracker,
     GovernanceError,
     StallDetector,
@@ -35,6 +36,30 @@ from airframe.tools.scoper import ContextBudgeter, ScopedToolInjector
 from airframe.workflows.loader import WorkflowPack
 
 _ACTIVE_WORKSPACE_DIR: ContextVar[Path | None] = ContextVar("airframe_active_workspace_dir", default=None)
+_MIN_CONTRACT_OUTPUT_TOKENS = 64
+_FALLBACK_COST_PER_TOKEN_USD = 5e-6
+
+
+def _estimate_contract_call_budget(
+    prompt: str,
+    system_prompt: str | None,
+    budget_tracker: BudgetTracker,
+) -> tuple[int, float]:
+    """Conservative synchronous estimate of (tokens, cost_usd) for an invoke_contract call."""
+    combined_prompt = f"{system_prompt or ''}\n{prompt}".strip()
+    prompt_tokens = ContextBudgeter.estimate_tokens(combined_prompt)
+    est_tokens = max(_MIN_CONTRACT_OUTPUT_TOKENS, prompt_tokens + _MIN_CONTRACT_OUTPUT_TOKENS)
+
+    if budget_tracker.max_cost_usd is None:
+        return est_tokens, 0.0
+
+    if budget_tracker.total_tokens > 0 and budget_tracker.total_cost_usd > 0.0:
+        observed_rate = budget_tracker.total_cost_usd / budget_tracker.total_tokens
+        cost_rate = max(_FALLBACK_COST_PER_TOKEN_USD, observed_rate)
+    else:
+        cost_rate = _FALLBACK_COST_PER_TOKEN_USD
+
+    return est_tokens, est_tokens * cost_rate
 
 
 def get_current_workspace_dir() -> Path | None:
@@ -418,19 +443,34 @@ class WorkflowRunner:
 
         # Short-circuit directly to invoke_contract when no executable local tools are bound
         if not active_tool_names:
-            async with tracer.start_span(
-                f"model.invoke_contract.{blueprint.name}",
-                kind="model",
-                attributes={"model": adapter.model_name, "contract": contract_schema.__name__},
-            ):
-                validated_obj, resp = await adapter.invoke_contract(
-                    prompt=input_query,
-                    schema=contract_schema,
-                    system_prompt=sys_prompt,
-                    max_retries=2,
-                )
+            est_tokens, est_cost = _estimate_contract_call_budget(
+                prompt=input_query,
+                system_prompt=sys_prompt,
+                budget_tracker=budget_tracker,
+            )
+            reservation: BudgetReservation = budget_tracker.reserve(
+                estimated_tokens=est_tokens,
+                estimated_cost_usd=est_cost,
+                label=f"model.invoke_contract.{blueprint.name}",
+            )
+            try:
+                async with tracer.start_span(
+                    f"model.invoke_contract.{blueprint.name}",
+                    kind="model",
+                    attributes={"model": adapter.model_name, "contract": contract_schema.__name__},
+                ):
+                    validated_obj, resp = await adapter.invoke_contract(
+                        prompt=input_query,
+                        schema=contract_schema,
+                        system_prompt=sys_prompt,
+                        max_retries=2,
+                    )
+            except BaseException:
+                budget_tracker.refund(reservation)
+                raise
 
-            budget_tracker.record_usage(
+            budget_tracker.reconcile(
+                reservation,
                 input_tokens=resp.usage.input_tokens,
                 output_tokens=resp.usage.output_tokens,
                 cost_usd=resp.usage.estimated_cost_usd,
@@ -557,19 +597,34 @@ class WorkflowRunner:
             )
             turn_prompts_log.append(turn_prompt)
 
-            async with tracer.start_span(
-                f"model.turn_{turns_executed}",
-                kind="model",
-                attributes={"turn": turns_executed, "shift": current_shift, "model": adapter.model_name},
-            ):
-                decision, last_resp = await adapter.invoke_contract(
-                    prompt=turn_prompt,
-                    schema=AgentStepDecision,
-                    system_prompt=sys_prompt,
-                    max_retries=2,
-                )
+            turn_est_tokens, turn_est_cost = _estimate_contract_call_budget(
+                prompt=turn_prompt,
+                system_prompt=sys_prompt,
+                budget_tracker=budget_tracker,
+            )
+            turn_reservation = budget_tracker.reserve(
+                estimated_tokens=turn_est_tokens,
+                estimated_cost_usd=turn_est_cost,
+                label=f"model.turn_{turns_executed}.{blueprint.name}",
+            )
+            try:
+                async with tracer.start_span(
+                    f"model.turn_{turns_executed}",
+                    kind="model",
+                    attributes={"turn": turns_executed, "shift": current_shift, "model": adapter.model_name},
+                ):
+                    decision, last_resp = await adapter.invoke_contract(
+                        prompt=turn_prompt,
+                        schema=AgentStepDecision,
+                        system_prompt=sys_prompt,
+                        max_retries=2,
+                    )
+            except BaseException:
+                budget_tracker.refund(turn_reservation)
+                raise
 
-            budget_tracker.record_usage(
+            budget_tracker.reconcile(
+                turn_reservation,
                 input_tokens=last_resp.usage.input_tokens,
                 output_tokens=last_resp.usage.output_tokens,
                 cost_usd=last_resp.usage.estimated_cost_usd,
@@ -822,15 +877,31 @@ class WorkflowRunner:
                 f"(available worker blueprints: {worker_blueprints or [entrypoint_bp.name]}):\n\n"
                 f"{input_query}"
             )
-            async with tracer.start_span("orchestrator.plan", kind="model"):
-                plan_obj, plan_resp = await adapter.invoke_contract(
-                    prompt=plan_prompt,
-                    schema=OrchestratorPlan,
-                    system_prompt=sys_prompt,
-                    max_retries=2,
-                )
+            plan_est_tokens, plan_est_cost = _estimate_contract_call_budget(
+                prompt=plan_prompt,
+                system_prompt=sys_prompt,
+                budget_tracker=budget_tracker,
+            )
+            plan_reservation = budget_tracker.reserve(
+                estimated_tokens=plan_est_tokens,
+                estimated_cost_usd=plan_est_cost,
+                label=f"orchestrator.plan.{entrypoint_bp.name}",
+            )
+            try:
+                async with tracer.start_span("orchestrator.plan", kind="model"):
+                    plan_obj, plan_resp = await adapter.invoke_contract(
+                        prompt=plan_prompt,
+                        schema=OrchestratorPlan,
+                        system_prompt=sys_prompt,
+                        max_retries=2,
+                    )
+            except BaseException:
+                budget_tracker.refund(plan_reservation)
+                raise
+
             turns_executed += 1
-            budget_tracker.record_usage(
+            budget_tracker.reconcile(
+                plan_reservation,
                 input_tokens=plan_resp.usage.input_tokens,
                 output_tokens=plan_resp.usage.output_tokens,
                 cost_usd=plan_resp.usage.estimated_cost_usd,
@@ -857,6 +928,7 @@ class WorkflowRunner:
             state_manager=state_manager,
             max_depth=self.max_recursion_depth,
             tracer=tracer,
+            budget_tracker=budget_tracker,
         )
 
         worker_tools: list[str] = []
@@ -914,15 +986,31 @@ class WorkflowRunner:
             f"Synthesize the following worker handoffs into final contract '{contract_schema.__name__}':\n"
             f"{handoff_text}"
         )
-        async with tracer.start_span("orchestrator.synthesize", kind="model"):
-            final_obj, synth_resp = await adapter.invoke_contract(
-                prompt=synth_prompt,
-                schema=contract_schema,
-                system_prompt=sys_prompt,
-                max_retries=2,
-            )
+        synth_est_tokens, synth_est_cost = _estimate_contract_call_budget(
+            prompt=synth_prompt,
+            system_prompt=sys_prompt,
+            budget_tracker=budget_tracker,
+        )
+        synth_reservation = budget_tracker.reserve(
+            estimated_tokens=synth_est_tokens,
+            estimated_cost_usd=synth_est_cost,
+            label=f"orchestrator.synthesize.{entrypoint_bp.name}",
+        )
+        try:
+            async with tracer.start_span("orchestrator.synthesize", kind="model"):
+                final_obj, synth_resp = await adapter.invoke_contract(
+                    prompt=synth_prompt,
+                    schema=contract_schema,
+                    system_prompt=sys_prompt,
+                    max_retries=2,
+                )
+        except BaseException:
+            budget_tracker.refund(synth_reservation)
+            raise
+
         turns_executed += 1
-        budget_tracker.record_usage(
+        budget_tracker.reconcile(
+            synth_reservation,
             input_tokens=synth_resp.usage.input_tokens,
             output_tokens=synth_resp.usage.output_tokens,
             cost_usd=synth_resp.usage.estimated_cost_usd,
